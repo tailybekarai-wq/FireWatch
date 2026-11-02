@@ -7,8 +7,13 @@ name = "firewatch-pipeline"
 version = "0.1.0"
 description = "FireWatch ingestion pipeline: fetch, validate, store and score satellite detections."
 requires-python = ">=3.12"
-# Runtime dependencies are added in stages 3-4 (docs/DEVELOPMENT_ROADMAP.md).
-dependencies = ["firewatch-shared"]
+# FIRMS/Open-Meteo client dependencies are added in stages 3-4 (docs/DEVELOPMENT_ROADMAP.md).
+dependencies = [
+    "firewatch-shared",
+    "httpx>=0.28",
+    "psycopg[binary]>=3.2",
+    "shapely>=2.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/firewatch_pipeline"]
