@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firewatch-pipeline"
+version = "0.1.0"
+description = "FireWatch ingestion pipeline: fetch, validate, store and score satellite detections."
+requires-python = ">=3.12"
+# Runtime dependencies are added in stages 3-4 (docs/DEVELOPMENT_ROADMAP.md).
+dependencies = ["firewatch-shared"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firewatch_pipeline"]

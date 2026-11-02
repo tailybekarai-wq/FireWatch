@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firewatch-ml"
+version = "0.1.0"
+description = "FireWatch model training, evaluation and registration (offline)."
+requires-python = ">=3.12"
+# Training dependencies (pandas, lightgbm, scikit-learn, ...) are added in stage 6.
+dependencies = ["firewatch-shared"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firewatch_ml"]

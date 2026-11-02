@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firewatch-api"
+version = "0.1.0"
+description = "FireWatch read-only REST API."
+requires-python = ">=3.12"
+# Runtime dependencies (FastAPI, SQLAlchemy, ...) are added in stage 5.
+dependencies = ["firewatch-shared"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firewatch_api"]
