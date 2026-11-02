@@ -1,0 +1,31 @@
+# Repository-wide tool configuration. Each Python component (shared/, pipeline/,
+# api/, ml/) is its own installable package with its own pyproject.toml.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["web", "db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "DTZ"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["firewatch_shared", "firewatch_pipeline", "firewatch_api", "firewatch_ml"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["firewatch_shared", "firewatch_pipeline", "firewatch_api", "firewatch_ml"]
+mypy_path = ["shared/src", "pipeline/src", "api/src", "ml/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["shared/tests", "pipeline/tests", "api/tests", "ml/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["firewatch_shared", "firewatch_pipeline", "firewatch_api", "firewatch_ml"]
+branch = true
