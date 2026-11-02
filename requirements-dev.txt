@@ -3,6 +3,7 @@
 -e ./pipeline
 -e ./api
 -e ./ml
+-r db/requirements.txt
 
 ruff>=0.8
 mypy>=1.13

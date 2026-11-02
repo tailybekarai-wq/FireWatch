@@ -1,0 +1,4 @@
+# Database migrations (Alembic over psycopg 3). Used locally and by migrate.yml.
+alembic>=1.14
+sqlalchemy>=2.0.36
+psycopg[binary]>=3.2
