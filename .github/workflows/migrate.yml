@@ -1,0 +1,42 @@
+name: Migrate database
+
+# Manual only: applies Alembic migrations to the production Neon branch.
+# Requires the DATABASE_URL_OWNER secret (direct, non-pooled URL) in the
+# "production" environment, which can be set to require approval.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Alembic target revision"
+        required: true
+        default: "head"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: db/requirements.txt
+      - run: pip install -r db/requirements.txt -e ./shared
+      - name: Current revision
+        run: alembic -c db/alembic.ini current
+        env:
+          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+      - name: Upgrade
+        run: alembic -c db/alembic.ini upgrade "$TARGET"
+        env:
+          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+          TARGET: ${{ inputs.target }}
