@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firewatch-shared"
+version = "0.1.0"
+description = "Shared schemas and constants for FireWatch (pipeline and API)."
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firewatch_shared"]
