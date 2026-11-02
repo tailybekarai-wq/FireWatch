@@ -236,9 +236,19 @@ FROM regions r WHERE d.region_id IS NULL AND r.level = 1 AND ST_Intersects(r.geo
 
 ## 5. Роли
 
-- `firewatch_writer`: INSERT, UPDATE, REFRESH MV. Используется pipeline.
-- `firewatch_reader`: SELECT на представления. Используется API.
-- Миграции выполняются владельцем БД из CI или локально.
+Реализовано в миграции `db/migrations/versions/0001_initial_schema.py`:
+
+- `firewatch_write` (групповая, NOLOGIN): SELECT, INSERT, UPDATE, DELETE на рабочие таблицы, SELECT на справочники и представления. REFRESH витрины `mv_daily_stats` выполняется через функцию `refresh_daily_stats()` (SECURITY DEFINER), потому что REFRESH требует прав владельца.
+- `firewatch_read` (групповая, NOLOGIN): только SELECT на таблицы и представления, кроме `rejected_records`.
+- Права выдаются явным списком таблиц. Служебные `spatial_ref_sys` (PostGIS) и `alembic_version` в него не входят.
+- Пользователи с LOGIN для pipeline и API создаются на этапах 4–5 и получают членство в этих группах. Пароли в миграциях не хранятся.
+- Миграции выполняет владелец БД по **прямому** подключению (`DATABASE_URL_OWNER` или `DATABASE_URL_UNPOOLED`, без `-pooler`): локально или через `.github/workflows/migrate.yml`.
+
+Отличия от исходного проекта схемы, внесённые при реализации:
+- `detections.geom` — генерируемый столбец из `longitude` и `latitude`, поэтому расхождение координат невозможно.
+- `regions` дополнен полями `name_kk`, `name_en` и `osm_relation_id`.
+- `source_fetches` не удаляются по сроку: на них ссылаются `detections` (provenance). Объём небольшой, порядка 50 тыс. строк в год.
+- `source_fetches.request_url_redacted` защищён CHECK-ограничением от сохранения MAP_KEY.
 
 ## 6. Бюджет хранения (Neon Free: 0,5 ГБ)
 
@@ -247,7 +257,7 @@ FROM regions r WHERE d.region_id IS NULL AND r.level = 1 AND ST_Intersects(r.geo
 Политика:
 1. Территория ограничивается Казахстаном (bbox `46.4,40.5,87.4,55.5`). Глобальное покрытие в бесплатный тариф не помещается.
 2. Детальные записи хранятся **N месяцев** (параметр). Более старые остаются только в `mv_daily_stats`.
-3. `rejected_records` хранятся 30 дней, `source_fetches` 90 дней.
+3. `rejected_records` хранятся 30 дней. `source_fetches` хранятся бессрочно: на них ссылается provenance обнаружений.
 4. Обучающий датасет ML хранится **вне БД** (Parquet в GitHub Release или локально).
 5. Pipeline проверяет `pg_database_size()` и предупреждает при 80 % лимита.
 
