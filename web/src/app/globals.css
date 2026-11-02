@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Base tokens only. The full design system comes from Claude Design (stage 7). */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b0f14;
+    --foreground: #e6e9ee;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
