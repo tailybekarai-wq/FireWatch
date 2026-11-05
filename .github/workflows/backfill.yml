@@ -1,0 +1,57 @@
+name: Backfill history
+
+# Manual: load a historical period for one FIRMS product (5-day chunks, idempotent).
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "FIRMS product (data_sources.code)"
+        required: true
+        type: choice
+        options:
+          - FIRMS_VIIRS_NOAA20_SP
+          - FIRMS_VIIRS_NOAA21_SP
+          - FIRMS_MODIS_SP
+          - FIRMS_VIIRS_NOAA20_NRT
+          - FIRMS_VIIRS_NOAA21_NRT
+          - FIRMS_MODIS_NRT
+      start:
+        description: "First day, YYYY-MM-DD"
+        required: true
+      end:
+        description: "Last day, YYYY-MM-DD"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            shared/pyproject.toml
+            pipeline/pyproject.toml
+      - run: pip install -e ./shared -e ./pipeline
+      - name: Backfill
+        run: >-
+          python -m firewatch_pipeline.backfill
+          --source "$SOURCE" --start "$START" --end "$END"
+          --cache-dir "$RUNNER_TEMP/firms"
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AOI_BBOX: ${{ vars.AOI_BBOX }}
+          SOURCE: ${{ inputs.source }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}

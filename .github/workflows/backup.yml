@@ -1,0 +1,39 @@
+name: Backup database
+
+# Weekly logical backup (pg_dump custom format) kept as a workflow artifact for 30 days.
+# The database holds only public satellite/weather data and no credentials; pg_dump does
+# not export role passwords. pg_dump must not be older than the server (Neon: Postgres 18),
+# so the client comes from the official PGDG apt repository.
+on:
+  schedule:
+    - cron: "23 2 * * 0"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-18
+          /usr/lib/postgresql/18/bin/pg_dump --version
+      - name: Dump
+        run: |
+          /usr/lib/postgresql/18/bin/pg_dump --format=custom --no-owner --no-privileges \
+            --file="firewatch-$(date -u +%Y%m%dT%H%MZ).dump" "$DATABASE_URL_UNPOOLED"
+          ls -lh ./*.dump
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firewatch-db-dump
+          path: "*.dump"
+          retention-days: 30
+          if-no-files-found: error

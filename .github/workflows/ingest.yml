@@ -1,0 +1,38 @@
+name: Ingest satellite data
+
+# Every 30 minutes, off the top of the hour (scheduled runs are most delayed at :00).
+# FIRMS NRT is published within ~3 h of an overpass; DAY_RANGE=2 overlaps the
+# previous runs, so a skipped or delayed schedule is caught up idempotently.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            shared/pyproject.toml
+            pipeline/pyproject.toml
+      - run: pip install -e ./shared -e ./pipeline
+      - name: Run ingestion
+        run: python -m firewatch_pipeline.run --trigger "$TRIGGER"
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AOI_BBOX: ${{ vars.AOI_BBOX }}
+          TRIGGER: ${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
