@@ -25,7 +25,8 @@ class RiskLevel(StrEnum):
 
 
 class ProcessingLevel(StrEnum):
-    """FIRMS processing level, taken from the suffix of the ``version`` field."""
+    """FIRMS processing level: SP for standard products, otherwise the NRT/RT/URT
+    suffix of the ``version`` field (SP versions such as "2" or "61.03" have none)."""
 
     URT = "URT"
     RT = "RT"
