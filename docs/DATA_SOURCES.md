@@ -51,8 +51,9 @@ GET https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{SOURCE}/{W,S,E,
 ### 2.5. Атрибуты (используемые)
 VIIRS: `latitude, longitude, bright_ti4, scan, track, acq_date, acq_time, satellite, instrument, confidence (l/n/h), version, bright_ti5, frp, daynight`.
 MODIS: `latitude, longitude, brightness, scan, track, acq_date, acq_time, satellite, instrument, confidence (0–100), version, bright_t31, frp, daynight`.
-⚠ Точные имена колонок сверить на странице «Active Fire Data Attributes for MODIS and VIIRS» и по первой реальной выгрузке. Парсер должен падать с явной ошибкой при изменении схемы.
-⚠ Поле `type` (0: растительный пожар, 1: вулкан, 2: иной статичный источник, 3: в море) по документации FIRMS **есть только в SP/архивных продуктах, не в NRT**. Проверить по архивной выгрузке.
+Имена колонок **подтверждены по реальным выгрузкам** 2026-11-03 (см. [findings/firms_schema_check.md](findings/firms_schema_check.md)). Парсер (`firewatch_pipeline.firms_parse`) падает с явной ошибкой `schema_changed` при любом изменении заголовка.
+Поле `type` (0: растительный пожар, 1: вулкан, 2: иной статичный источник, 3: в море) **есть только в SP-продуктах**, в NRT его нет (подтверждено).
+`acq_time` приходит как HHMM без ведущих нулей (`32` = 00:32). У SP-версий нет суффикса NRT/RT/URT (`2`, `61.03`).
 
 ### 2.6. Ограничения интерпретации (из документации FIRMS)
 - Координаты — это **центр пикселя**. Сам пожар обычно меньше пикселя (375 м для VIIRS и около 1 км для MODIS в надире, к краям полосы обзора пиксель больше).

@@ -81,7 +81,7 @@ burned_area_assessments *──1 hotspot_clusters   (опционально, Sen
 | dedup_key | text UNIQUE | `sha1(source_code, satellite, observed_at, round(lat,4), round(lon,4))`. Не включает `version`, поэтому смена URT → NRT обновляет существующую запись ⚠ проверить на реальных данных, не смещаются ли координаты между версиями |
 | source_id | smallint FK | |
 | first_fetch_id, last_fetch_id | bigint FK → source_fetches | Происхождение |
-| satellite | text | Как в FIRMS (`N20`, `N21`, `T`, `A` ⚠ сверить коды) |
+| satellite | text | Как в FIRMS: `N20`, `N21`, `N` (Suomi NPP), `Terra`, `Aqua` (подтверждено по реальным выгрузкам 2026-11-03) |
 | instrument | text | `VIIRS`, `MODIS` |
 | observed_at | timestamptz | Из `acq_date` и `acq_time` (UTC) |
 | geom | geometry(Point, 4326) | Центр пикселя |
@@ -90,7 +90,7 @@ burned_area_assessments *──1 hotspot_clusters   (опционально, Sen
 | bright_aux_k | real | VIIRS `bright_ti5` / MODIS `bright_t31` |
 | frp_mw | real | Fire Radiative Power, МВт |
 | confidence_raw | text | Как в источнике: `l`/`n`/`h` или `0–100` |
-| confidence_level | text | Нормализованно: `low`/`nominal`/`high`. Для MODIS границы классов берутся из документации FIRMS ⚠ сверить |
+| confidence_level | text | Нормализованно: `low`/`nominal`/`high`. VIIRS: `l`/`n`/`h`. MODIS (0–100): < 30 → low, 30–79 → nominal, ≥ 80 → high (FIRMS FAQ) |
 | scan_km, track_km | real | Размер пикселя |
 | daynight | char(1) | `D`/`N` |
 | product_version | text | Например `2.0NRT` |
@@ -252,7 +252,9 @@ FROM regions r WHERE d.region_id IS NULL AND r.level = 1 AND ST_Intersects(r.geo
 
 ## 6. Бюджет хранения (Neon Free: 0,5 ГБ)
 
-Оценка строки `detections` вместе с индексами: **~400–500 байт** ⚠ уточнить на реальных данных. 0,5 ГБ минус регионы, погода и служебные таблицы (~100 МБ) дают ≈ **0,8–1 млн обнаружений**.
+Оценка строки `detections` вместе с индексами: **~450–600 байт**. 0,5 ГБ минус регионы, погода и служебные таблицы (~100 МБ) дают ≈ **0,7–0,9 млн обнаружений**.
+
+**Фактический объём** (архив SP за 2025 год, см. [findings/firms_schema_check.md](findings/firms_schema_check.md)): внутри границы Казахстана **147 149 обнаружений в год** (NOAA-20 66 тыс., NOAA-21 65 тыс., MODIS 16 тыс.), то есть **~63–84 МБ в год**. Детальная история помещается примерно на 4–5 лет. В bbox попадает в 2,4 раза больше точек, поэтому pipeline хранит только точки внутри страны.
 
 Политика:
 1. Территория ограничивается Казахстаном (bbox `46.4,40.5,87.4,55.5`). Глобальное покрытие в бесплатный тариф не помещается.
