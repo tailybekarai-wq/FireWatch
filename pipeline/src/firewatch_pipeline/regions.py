@@ -353,9 +353,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     load_env_files(repo_env_files(repo_root))
-    url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL_WRITER")
+    url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
     if not url:
-        print("Set DATABASE_URL_UNPOOLED or DATABASE_URL_WRITER", file=sys.stderr)
+        print("Set DATABASE_URL_UNPOOLED or DATABASE_URL", file=sys.stderr)
         return 1
     source_version = (
         f"{doc['source']} snapshot {doc['snapshot']}; loaded {datetime.now(UTC):%Y-%m-%dT%H:%MZ}"

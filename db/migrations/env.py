@@ -18,7 +18,7 @@ if config.config_file_name is not None:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Migrations need a direct connection: PgBouncer (the -pooler host) does not keep
 # session state between transactions.
-URL_VARIABLES = ("DATABASE_URL_OWNER", "DATABASE_URL_UNPOOLED")
+URL_VARIABLES = ("DATABASE_URL_UNPOOLED",)
 
 
 def resolve_url() -> str:

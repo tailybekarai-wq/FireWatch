@@ -242,7 +242,7 @@ FROM regions r WHERE d.region_id IS NULL AND r.level = 1 AND ST_Intersects(r.geo
 - `firewatch_read` (групповая, NOLOGIN): только SELECT на таблицы и представления, кроме `rejected_records`.
 - Права выдаются явным списком таблиц. Служебные `spatial_ref_sys` (PostGIS) и `alembic_version` в него не входят.
 - Пользователи с LOGIN для pipeline и API создаются на этапах 4–5 и получают членство в этих группах. Пароли в миграциях не хранятся.
-- Миграции выполняет владелец БД по **прямому** подключению (`DATABASE_URL_OWNER` или `DATABASE_URL_UNPOOLED`, без `-pooler`): локально или через `.github/workflows/migrate.yml`.
+- Миграции выполняет владелец БД по **прямому** подключению (`DATABASE_URL_UNPOOLED`, без `-pooler`): локально или через `.github/workflows/migrate.yml`.
 
 Отличия от исходного проекта схемы, внесённые при реализации:
 - `detections.geom` — генерируемый столбец из `longitude` и `latitude`, поэтому расхождение координат невозможно.

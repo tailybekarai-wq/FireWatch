@@ -59,8 +59,8 @@
 | Переменная | Где хранится | Назначение |
 |---|---|---|
 | `FIRMS_MAP_KEY` | GitHub Secrets | Ключ FIRMS |
-| `DATABASE_URL_WRITER` | GitHub Secrets | Роль `firewatch_writer` (pipeline, миграции через отдельный `DATABASE_URL_OWNER`) |
-| `DATABASE_URL_OWNER` | GitHub Secrets (environment `production`, ручное подтверждение) | Миграции Alembic |
+| `DATABASE_URL` | GitHub Secrets, `.env.local` | Подключение через пул (`-pooler`): запись данных pipeline |
+| `DATABASE_URL_UNPOOLED` | GitHub Secrets, `.env.local` | Прямое подключение: миграции Alembic, загрузка регионов, `pg_dump` |
 | `DATABASE_URL_READER` | Render Env | Роль `firewatch_reader` (API) |
 | `CORS_ORIGINS` | Render Env | `https://<project>.vercel.app` |
 | `AOI_BBOX` | GitHub Variables | Территория `W,S,E,N`: `46.4,40.5,87.4,55.5` (Казахстан) |
@@ -125,7 +125,7 @@ jobs:
       - run: python -m pipeline.run
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL_WRITER }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AOI_BBOX: ${{ vars.AOI_BBOX }}
 ```
 (Это иллюстрация конфигурации для плана. Финальный файл создаётся на этапе 4.)

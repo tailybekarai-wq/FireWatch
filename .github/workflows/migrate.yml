@@ -1,8 +1,9 @@
 name: Migrate database
 
 # Manual only: applies Alembic migrations to the production Neon branch.
-# Requires the DATABASE_URL_OWNER secret (direct, non-pooled URL) in the
-# "production" environment, which can be set to require approval.
+# Uses the DATABASE_URL_UNPOOLED secret (direct, non-pooled URL): PgBouncer does not
+# keep session state between transactions. The "production" environment can be set
+# to require approval.
 on:
   workflow_dispatch:
     inputs:
@@ -34,9 +35,9 @@ jobs:
       - name: Current revision
         run: alembic -c db/alembic.ini current
         env:
-          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
       - name: Upgrade
         run: alembic -c db/alembic.ini upgrade "$TARGET"
         env:
-          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           TARGET: ${{ inputs.target }}
