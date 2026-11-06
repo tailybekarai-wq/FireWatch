@@ -4,7 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { AttributionControl, LngLatBounds, Map as MapLibre, NavigationControl, type GeoJSONSource } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dateTime } from "@/lib/format";
-import { MAP_ATTRIBUTION, MAP_STYLE } from "./mapStyle";
+import { BasemapToggle } from "./BasemapToggle";
+import { MAP_ATTRIBUTION, MAP_STYLE, addSatellite, pulse, setSatellite } from "./mapStyle";
 
 export type SpotPoint = { id: number; lat: number; lon: number; color: string; t: string; href?: string };
 
@@ -35,14 +36,18 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
   const times = useMemo(() => [...new Set(points.map((p) => p.t))].sort(), [points]);
   const [step, setStep] = useState(Math.max(0, times.length - 1));
   const [playing, setPlaying] = useState(false);
+  const [satellite, setSat] = useState(true);
   const until = replay && times.length ? times[Math.min(step, times.length - 1)] : undefined;
 
   useEffect(() => {
     if (!container.current || map.current) return;
-    const m = new MapLibre({ container: container.current, style: MAP_STYLE, center: [center.lon, center.lat], zoom: 12, attributionControl: false });
+    // start from a regional view and fly in once the data layers are ready
+    const m = new MapLibre({ container: container.current, style: MAP_STYLE, center: [center.lon, center.lat], zoom: 6, attributionControl: false });
+    let stopPulse = () => {};
     m.addControl(new AttributionControl({ compact: true, customAttribution: MAP_ATTRIBUTION }), "bottom-right");
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     m.on("load", () => {
+      addSatellite(m, true);
       m.addSource("area", { type: "geojson", data: { type: "FeatureCollection", features: [
         ...(radiusKm ? [{ type: "Feature" as const, properties: { kind: "radius" }, geometry: { type: "Polygon" as const, coordinates: [circle(center.lat, center.lon, radiusKm)] } }] : []),
         ...(hull ? [{ type: "Feature" as const, properties: { kind: "hull" }, geometry: hull }] : []),
@@ -52,18 +57,21 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
         "line-color": ["match", ["get", "kind"], "hull", "#FF9A6B", "rgba(238,243,246,.45)"], "line-width": 1.2, "line-dasharray": [3, 3] } });
       m.addSource("pts", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       m.addLayer({ id: "pts", type: "circle", source: "pts", paint: {
-        "circle-color": ["get", "color"], "circle-radius": 6, "circle-opacity": ["get", "o"],
+        "circle-color": ["get", "color"], "circle-radius": 0, "circle-radius-transition": { duration: 700, delay: 0 }, "circle-opacity": ["get", "o"],
         "circle-stroke-color": "#04070A", "circle-stroke-width": 2 } });
       if (focusColor) {
         m.addSource("focus", { type: "geojson", data: { type: "Point", coordinates: [center.lon, center.lat] } });
-        m.addLayer({ id: "focus-ring", type: "circle", source: "focus", paint: { "circle-radius": 14, "circle-opacity": 0, "circle-stroke-color": "#EEF3F6", "circle-stroke-width": 1.5 } });
+        m.addLayer({ id: "focus-halo", type: "circle", source: "focus", paint: { "circle-radius": 14, "circle-opacity": 0, "circle-stroke-color": "#EEF3F6", "circle-stroke-width": 1.5 } });
+        m.addLayer({ id: "focus-ring", type: "circle", source: "focus", paint: { "circle-radius": 8, "circle-opacity": 0, "circle-stroke-color": focusColor, "circle-stroke-width": 2 } });
+        stopPulse = pulse(m, "focus-ring");
         m.addLayer({ id: "focus", type: "circle", source: "focus", paint: { "circle-radius": 7, "circle-color": focusColor, "circle-stroke-color": "#04070A", "circle-stroke-width": 2 } });
       }
       const b = new LngLatBounds([center.lon, center.lat], [center.lon, center.lat]);
       for (const p of points) b.extend([p.lon, p.lat]);
       if (radiusKm) for (const c of circle(center.lat, center.lon, radiusKm, 8)) b.extend(c);
       if (hull) for (const c of hull.coordinates[0]) b.extend(c as [number, number]);
-      m.fitBounds(b, { padding: 48, maxZoom: 14, duration: 0 });
+      m.fitBounds(b, { padding: 56, maxZoom: 14, duration: 1800, essential: true });
+      m.once("moveend", () => { if (m.getLayer("pts")) m.setPaintProperty("pts", "circle-radius", 6); });
       m.on("click", "pts", (e) => {
         const href = e.features?.[0]?.properties?.href;
         if (href) window.location.assign(String(href));
@@ -73,8 +81,12 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
       setReady(true);
     });
     map.current = m;
-    return () => { m.remove(); map.current = null; };
+    return () => { stopPulse(); m.remove(); map.current = null; };
   }, [center.lat, center.lon, radiusKm, hull, focusColor, points]);
+
+  useEffect(() => {
+    if (ready && map.current) setSatellite(map.current, satellite);
+  }, [ready, satellite]);
 
   useEffect(() => {
     if (!ready || !map.current) return;
@@ -103,6 +115,7 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
     <div className="relative overflow-hidden rounded-[28px] border border-white/5 bg-[#070C10]" style={{ height }}>
       {/* .maplibregl-map sets position:relative, so positioning lives on a wrapper */}
       <div className="absolute inset-0"><div ref={container} className="h-full w-full" aria-label={label} /></div>
+      <BasemapToggle satellite={satellite} onChange={setSat} className="absolute left-4 top-4" />
       {replay && times.length > 1 && (
         <div className="glass absolute inset-x-4 bottom-9 flex items-center gap-2.5 rounded-2xl px-3 py-2 text-xs">
           <button type="button" className="btn h-8 px-2.5" aria-label="Предыдущий шаг"

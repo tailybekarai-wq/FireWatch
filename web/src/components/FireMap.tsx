@@ -9,7 +9,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Focus } from "@/lib/data";
 import { CONFIDENCE, NO_SCORE, RISK, SATELLITES, coord, dateTime, dec, firmsMapUrl, satLabel } from "@/lib/format";
-import { MAP_ATTRIBUTION, MAP_STYLE } from "./mapStyle";
+import { BasemapToggle } from "./BasemapToggle";
+import { MAP_ATTRIBUTION, MAP_STYLE, addSatellite, pulse, setSatellite } from "./mapStyle";
 
 const PERIODS = [{ d: 1, label: "24 часа" }, { d: 3, label: "3 дня" }, { d: 7, label: "7 дней" }, { d: 30, label: "30 дней" }];
 const RISK_KEYS = ["very_high", "high", "moderate", "low", "none"] as const;
@@ -55,6 +56,7 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
   const [listRows, setListRows] = useState<Feature[]>([]);
   const [result, setResult] = useState<{ key: string; status: "ok" | "error"; meta: Meta } | null>(null);
   const [selected, setSelected] = useState<Selected | null>(null);
+  const [satellite, setSat] = useState(true);
   const key = `${days}|${sats.join(",")}|${conf.join(",")}|${risk.join(",")}|${region}`;
   const state = !result || result.key !== key ? "loading" : result.status;
   const meta = result?.key === key ? result.meta : null;
@@ -76,13 +78,12 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
 
   useEffect(() => {
     if (!container.current || map.current) return;
-    const m = new MapLibre({
-      container: container.current, style: MAP_STYLE, attributionControl: false,
-      center: focus ? [focus.lon, focus.lat] : [67, 48.2], zoom: focus ? 11 : 3.6,
-    });
+    const m = new MapLibre({ container: container.current, style: MAP_STYLE, attributionControl: false, center: [67, 48.2], zoom: 3.6 });
+    let stopPulse = () => {};
     m.addControl(new AttributionControl({ compact: true, customAttribution: MAP_ATTRIBUTION }), "bottom-right");
     m.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     m.on("load", () => {
+      addSatellite(m, true);
       m.addSource("det", { type: "geojson", data: { type: "FeatureCollection", features: [] }, cluster: true, clusterRadius: 38, clusterMaxZoom: 9 });
       m.addLayer({ id: "clusters", type: "circle", source: "det", filter: ["has", "point_count"], paint: {
         "circle-color": "#36D6E7", "circle-opacity": 0.22, "circle-stroke-color": "#36D6E7", "circle-stroke-width": 1.2,
@@ -94,17 +95,22 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
         "circle-color": colorExpression("firms") as never,
         "circle-radius": ["interpolate", ["linear"], ["ln", ["max", 1, ["coalesce", ["get", "f"], 1]]], 0, 3.5, 7, 11],
         "circle-stroke-color": "#04070A", "circle-stroke-width": 1.5, "circle-blur": 0.1 } });
+      m.addSource("sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      m.addLayer({ id: "sel-ring", type: "circle", source: "sel", paint: { "circle-radius": 8, "circle-opacity": 0, "circle-stroke-color": "#EEF3F6", "circle-stroke-width": 2 } });
+      stopPulse = pulse(m, "sel-ring", 9, 30);
+      if (focus) m.flyTo({ center: [focus.lon, focus.lat], zoom: 11, duration: 2600, curve: 1.6, essential: true });
       m.on("click", "clusters", async (e: MapLayerMouseEvent) => {
         const f = e.features?.[0] as MapGeoJSONFeature | undefined;
         if (!f) return;
         const zoom = await (m.getSource("det") as GeoJSONSource).getClusterExpansionZoom(f.properties.cluster_id as number);
-        m.easeTo({ center: (f.geometry as GeoJSON.Point).coordinates as [number, number], zoom });
+        m.easeTo({ center: (f.geometry as GeoJSON.Point).coordinates as [number, number], zoom, duration: 900 });
       });
       m.on("click", "points", (e: MapLayerMouseEvent) => {
         const f = e.features?.[0];
         if (!f) return;
         const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
         select(readProps(f.properties as Record<string, unknown>), lon, lat);
+        m.easeTo({ center: [lon, lat], duration: 700 });
       });
       for (const layer of ["clusters", "points"]) {
         m.on("mouseenter", layer, () => { m.getCanvas().style.cursor = "pointer"; });
@@ -114,8 +120,19 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
       setReady(true);
     });
     map.current = m;
-    return () => { m.remove(); map.current = null; };
+    return () => { stopPulse(); m.remove(); map.current = null; };
   }, [focus, refreshList, select]);
+
+  useEffect(() => {
+    if (ready && map.current) setSatellite(map.current, satellite);
+  }, [ready, satellite]);
+
+  // pulsing ring follows the selected detection
+  useEffect(() => {
+    if (!ready || !map.current) return;
+    (map.current.getSource("sel") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: selected
+      ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [selected.lon, selected.lat] } }] : [] });
+  }, [ready, selected]);
 
   useEffect(() => {
     if (!map.current || !ready) return;
@@ -152,7 +169,7 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
   const reset = () => { setDays(1); setSats([]); setConf([]); setRisk([]); setRegion(""); };
   const flyTo = (f: Feature) => {
     const [lon, lat] = f.geometry.coordinates;
-    map.current?.easeTo({ center: [lon, lat], zoom: Math.max(map.current.getZoom(), 10) });
+    map.current?.flyTo({ center: [lon, lat], zoom: Math.max(map.current.getZoom(), 10), duration: 1400, essential: true });
     select(f.properties, lon, lat);
   };
 
@@ -162,6 +179,7 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
       <div className="absolute inset-0">
         <div ref={container} className="h-full w-full" aria-label="Карта спутниковых обнаружений" />
       </div>
+      <BasemapToggle satellite={satellite} onChange={setSat} className="absolute bottom-4 left-1/2 -translate-x-1/2" />
 
       <aside aria-label="Фильтры карты" className="glass rise absolute left-4 top-4 flex max-h-[calc(100%-32px)] w-[300px] max-w-[calc(100%-32px)] flex-col gap-4 overflow-y-auto rounded-[22px] p-[18px]">
         <div className="flex items-center justify-between">
