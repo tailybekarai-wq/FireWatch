@@ -6,7 +6,7 @@ import {
   type GeoJSONSource, type MapGeoJSONFeature, type MapLayerMouseEvent,
 } from "maplibre-gl";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Focus } from "@/lib/data";
 import { CONFIDENCE, NO_SCORE, RISK, SATELLITES, coord, dateTime, dec, firmsMapUrl, satLabel } from "@/lib/format";
 import { BasemapToggle } from "./BasemapToggle";
@@ -22,6 +22,8 @@ type Props = { id: number; s: string; c: string; f: number | null; t: string; r:
 type Feature = GeoJSON.Feature<GeoJSON.Point, Props>;
 type Selected = Props & { lon: number; lat: number; fresh: boolean };
 type Meta = { count: number; truncated: boolean } | null;
+// one row of /api/detections: id, lon, lat, satellite, confidence, FRP, Unix time, region id, p, level, hotspot
+type Row = [number, number, number, string, string, number | null, number, number | null, number | null, string, number | null];
 type Mode = "ml" | "firms";
 
 const riskColor = (k: string) => (k in RISK ? RISK[k].color : NO_SCORE.color);
@@ -45,6 +47,7 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const data = useRef<Feature[]>([]);
+  const regionName = useMemo(() => new Map(regions.map((r) => [r.id, r.name])), [regions]);
   const [ready, setReady] = useState(false);
   const [days, setDays] = useState(focus ? PERIODS.find((p) => p.d >= focus.days)?.d ?? focus.days : 1);
   const [sats, setSats] = useState<string[]>([]);
@@ -151,10 +154,13 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
     fetch(`/api/detections?${qs}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(String(res.status));
-        const json = await res.json();
+        const json: { rows: Row[]; meta: Meta } = await res.json();
         if (cancelled || !map.current) return;
-        data.current = json.features;
-        (map.current.getSource("det") as GeoJSONSource).setData(json);
+        data.current = json.rows.map(([id, lon, lat, s, c, f, t, rg, p, k, cl]) => ({
+          type: "Feature", geometry: { type: "Point", coordinates: [lon, lat] },
+          properties: { id, s, c, f, t: new Date(t * 1000).toISOString(), r: rg == null ? null : regionName.get(rg) ?? null, p, k, cl },
+        }));
+        (map.current.getSource("det") as GeoJSONSource).setData({ type: "FeatureCollection", features: data.current });
         setResult({ key, status: "ok", meta: json.meta });
         refreshList();
         const hit = focus && data.current.find((f) => f.properties.id === focus.id);
@@ -162,7 +168,7 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
       })
       .catch(() => { if (!cancelled) setResult({ key, status: "error", meta: null }); });
     return () => { cancelled = true; };
-  }, [key, ready, refreshList, focus, select]);
+  }, [key, ready, refreshList, focus, select, regionName]);
 
   const toggle = (list: string[], v: string, set: (x: string[]) => void) =>
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);

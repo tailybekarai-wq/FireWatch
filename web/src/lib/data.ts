@@ -1,5 +1,9 @@
-// Read-only data access for server components and route handlers. Every function marks
-// itself request-time with connection(): numbers always come from the live database.
+// Read-only data access for server components and route handlers. Each exported reader
+// marks itself request-time with connection() (nothing is read at build time, CI has no
+// database) and then reads through a "use cache" function: the database is queried at
+// most once a minute per query ("live") instead of once per request. Profiles live in
+// next.config.ts; ingest runs every ~30 min, so a minute of caching hides nothing.
+import { cacheLife } from "next/cache";
 import { connection } from "next/server";
 import { query } from "./db";
 
@@ -13,6 +17,12 @@ export type SourceStatus = {
 
 export async function getSources(): Promise<SourceStatus[]> {
   await connection();
+  return getSourcesCached();
+}
+
+async function getSourcesCached(): Promise<SourceStatus[]> {
+  "use cache";
+  cacheLife("live");
   return query<SourceStatus>(
     `SELECT code, name, provider, data_type, description, official_url, docs_url, license, enabled,
             deprecated_at, last_success_at, last_attempt_at, last_status, last_error_at, last_error,
@@ -27,18 +37,23 @@ export type Freshness = {
 
 export async function getFreshness(): Promise<Freshness> {
   await connection();
+  return getFreshnessCached();
+}
+
+async function getFreshnessCached(): Promise<Freshness> {
+  "use cache";
+  cacheLife("live");
   // FIRMS NRT latency is up to ~3 h, so older data is flagged as stale (computed by the DB clock).
-  const [row] = await query<{ last_success: string | null; stale: boolean; online: number; total: number }>(
+  const [[row], [run]] = await Promise.all([query<{ last_success: string | null; stale: boolean; online: number; total: number }>(
     `SELECT max(last_success_at) FILTER (WHERE data_type = 'active_fire') AS last_success,
             coalesce(max(last_success_at) FILTER (WHERE data_type = 'active_fire') < now() - interval '3 hours', true) AS stale,
             count(*) FILTER (WHERE enabled AND last_status = 'ok')::int AS online,
             count(*) FILTER (WHERE enabled)::int AS total
      FROM v_source_status`,
-  );
-  const [run] = await query<{ finished_at: string | null; status: string | null }>(
+  ), query<{ finished_at: string | null; status: string | null }>(
     `SELECT finished_at, status FROM ingestion_runs WHERE trigger <> 'backfill'
      ORDER BY started_at DESC LIMIT 1`,
-  );
+  )]);
   return { lastSuccess: row?.last_success ?? null, stale: row?.stale ?? true, lastRun: run?.finished_at ?? null,
     lastRunStatus: run?.status ?? null, online: row?.online ?? 0, total: row?.total ?? 0 };
 }
@@ -52,28 +67,30 @@ export type Summary = {
 
 export async function getSummary(days: number): Promise<Summary> {
   await connection();
-  const [counts] = await query<{ last24h: number; prev24h: number }>(
+  return getSummaryCached(days);
+}
+
+async function getSummaryCached(days: number): Promise<Summary> {
+  "use cache";
+  cacheLife("live");
+  const [[counts], [agg], bySatellite, topRegions, [model]] = await Promise.all([query<{ last24h: number; prev24h: number }>(
     `SELECT count(*) FILTER (WHERE observed_at >= now() - interval '24 hours')::int AS last24h,
             count(*) FILTER (WHERE observed_at < now() - interval '24 hours')::int AS prev24h
      FROM detections WHERE observed_at >= now() - interval '48 hours'`,
-  );
-  const [agg] = await query<{ period: number; total: number }>(
+  ), query<{ period: number; total: number }>(
     `SELECT coalesce(sum(detections) FILTER (WHERE day > current_date - $1::int), 0)::int AS period,
             coalesce(sum(detections), 0)::int AS total
      FROM mv_daily_stats`, [days],
-  );
-  const bySatellite = await query<{ satellite: string; n: number }>(
+  ), query<{ satellite: string; n: number }>(
     `SELECT satellite, sum(detections)::int AS n FROM mv_daily_stats
      WHERE day > current_date - $1::int GROUP BY satellite ORDER BY n DESC`, [days],
-  );
-  const topRegions = await query<{ id: number; name: string; n: number }>(
+  ), query<{ id: number; name: string; n: number }>(
     `SELECT r.id, coalesce(r.name_ru, r.name) AS name, sum(m.detections)::int AS n
      FROM mv_daily_stats m JOIN regions r ON r.id = m.region_id
      WHERE m.day > current_date - $1::int GROUP BY r.id, r.name_ru, r.name ORDER BY n DESC`, [days],
-  );
-  const [model] = await query<{ name: string; version: string }>(
+  ), query<{ name: string; version: string }>(
     `SELECT name, version FROM ml_model_versions WHERE status = 'active' LIMIT 1`,
-  );
+  )]);
   return { last24h: counts.last24h, prev24h: counts.prev24h, period: agg.period, total: agg.total,
     bySatellite, topRegions, model: model ?? null };
 }
@@ -83,6 +100,12 @@ export type Point = { t: string; n: number; frp: number };
 /** Hourly series for <= 3 days, daily otherwise; empty buckets are real zeros. */
 export async function getTimeline(days: number): Promise<{ unit: "hour" | "day"; points: Point[] }> {
   await connection();
+  return getTimelineCached(days);
+}
+
+async function getTimelineCached(days: number): Promise<{ unit: "hour" | "day"; points: Point[] }> {
+  "use cache";
+  cacheLife("live");
   if (days <= 3) {
     const points = await query<Point>(
       `SELECT g AS t, count(d.id)::int AS n, coalesce(sum(d.frp_mw), 0)::float8 AS frp
@@ -114,6 +137,12 @@ const ROW_COLUMNS = `id, observed_at, latitude, longitude, satellite, instrument
 
 export async function getRecent(limit: number): Promise<DetectionRow[]> {
   await connection();
+  return getRecentCached(limit);
+}
+
+async function getRecentCached(limit: number): Promise<DetectionRow[]> {
+  "use cache";
+  cacheLife("live");
   return query<DetectionRow>(
     `SELECT ${ROW_COLUMNS} FROM v_detections_public ORDER BY observed_at DESC, id DESC LIMIT $1`, [limit],
   );
@@ -147,15 +176,20 @@ function filterSql(f: DetectionFilter): { where: string; params: unknown[] } {
 
 export async function getDetections(f: DetectionFilter): Promise<{ rows: DetectionRow[]; total: number }> {
   await connection();
+  return getDetectionsCached(f);
+}
+
+async function getDetectionsCached(f: DetectionFilter): Promise<{ rows: DetectionRow[]; total: number }> {
+  "use cache";
+  cacheLife("live");
   const { where, params } = filterSql(f);
-  const [{ total }] = await query<{ total: number }>(
+  const [[{ total }], rows] = await Promise.all([query<{ total: number }>(
     // risk lives in the public view (active model); the plain table is cheaper otherwise
     `SELECT count(*)::int AS total FROM ${f.risk ? "v_detections_public" : "detections"} WHERE ${where}`, params,
-  );
-  const rows = await query<DetectionRow>(
+  ), query<DetectionRow>(
     `SELECT ${ROW_COLUMNS} FROM v_detections_public WHERE ${where}
      ORDER BY observed_at DESC, id DESC LIMIT ${f.size} OFFSET ${(f.page - 1) * f.size}`, params,
-  );
+  )]);
   return { rows, total };
 }
 
@@ -191,6 +225,12 @@ export type DetectionDetail = DetectionRow & {
 
 export async function getDetection(id: number): Promise<DetectionDetail | null> {
   await connection();
+  return getDetectionCached(id);
+}
+
+async function getDetectionCached(id: number): Promise<DetectionDetail | null> {
+  "use cache";
+  cacheLife("live");
   const [row] = await query<DetectionDetail>(
     `SELECT ${ROW_COLUMNS.split(",").map((c) => `v.${c.trim()}`).join(", ")},
             v.bright_main_k, v.bright_aux_k, v.scan_km, v.track_km, v.product_version,
@@ -221,6 +261,12 @@ export type Focus = { id: number; lat: number; lon: number; days: number };
 /** A detection to centre the map on, with the smallest map period that still contains it. */
 export async function getFocus(id: number): Promise<Focus | null> {
   await connection();
+  return getFocusCached(id);
+}
+
+async function getFocusCached(id: number): Promise<Focus | null> {
+  "use cache";
+  cacheLife("live");
   const [row] = await query<Focus>(
     `SELECT id, latitude AS lat, longitude AS lon,
             least(366, greatest(1, ceil(extract(epoch FROM now() - observed_at) / 86400)))::int AS days
@@ -231,11 +277,23 @@ export async function getFocus(id: number): Promise<Focus | null> {
 
 export async function getRegions(): Promise<{ id: number; name: string }[]> {
   await connection();
+  return getRegionsCached();
+}
+
+async function getRegionsCached(): Promise<{ id: number; name: string }[]> {
+  "use cache";
+  cacheLife("slow");
   return query(`SELECT id, coalesce(name_ru, name) AS name FROM regions WHERE level = 1 ORDER BY 2`);
 }
 
 export async function getMonthly(): Promise<{ year: number; month: number; n: number }[]> {
   await connection();
+  return getMonthlyCached();
+}
+
+async function getMonthlyCached(): Promise<{ year: number; month: number; n: number }[]> {
+  "use cache";
+  cacheLife("slow");
   return query(
     `SELECT extract(year FROM day)::int AS year, extract(month FROM day)::int AS month, sum(detections)::int AS n
      FROM mv_daily_stats GROUP BY 1, 2 ORDER BY 1, 2`,
@@ -244,6 +302,12 @@ export async function getMonthly(): Promise<{ year: number; month: number; n: nu
 
 export async function getFrpHistogram(days: number): Promise<{ bucket: string; n: number }[]> {
   await connection();
+  return getFrpHistogramCached(days);
+}
+
+async function getFrpHistogramCached(days: number): Promise<{ bucket: string; n: number }[]> {
+  "use cache";
+  cacheLife("live");
   return query(
     `SELECT b.label AS bucket, count(d.id)::int AS n
      FROM (VALUES (1, '< 5', 0, 5), (2, '5–10', 5, 10), (3, '10–25', 10, 25), (4, '25–50', 25, 50),
@@ -262,6 +326,12 @@ export type ModelVersion = {
 
 export async function getModels(): Promise<ModelVersion[]> {
   await connection();
+  return getModelsCached();
+}
+
+async function getModelsCached(): Promise<ModelVersion[]> {
+  "use cache";
+  cacheLife("slow");
   return query<ModelVersion>(
     `SELECT name, version, algorithm, status, trained_at, metrics, features, limitations, artifact_url
      FROM ml_model_versions ORDER BY trained_at DESC`,
@@ -287,6 +357,12 @@ export type ActiveModel = {
 /** The model whose scores are shown, with the metrics computed by its evaluation run. */
 export async function getActiveModel(): Promise<ActiveModel | null> {
   await connection();
+  return getActiveModelCached();
+}
+
+async function getActiveModelCached(): Promise<ActiveModel | null> {
+  "use cache";
+  cacheLife("slow");
   const [row] = await query<ActiveModel>(
     `SELECT id, name, version, algorithm, status, trained_at, features, thresholds, limitations,
             validation_scheme, artifact_url, artifact_sha256, git_sha, metrics
@@ -303,6 +379,12 @@ export type Prediction = {
 
 export async function getPrediction(id: number): Promise<Prediction | null> {
   await connection();
+  return getPredictionCached(id);
+}
+
+async function getPredictionCached(id: number): Promise<Prediction | null> {
+  "use cache";
+  cacheLife("live");
   const [row] = await query<Prediction>(
     `SELECT p.probability, p.risk_level, p.scored_at, mv.version, p.features, p.top_contributions
      FROM ml_predictions p JOIN ml_model_versions mv ON mv.id = p.model_version_id AND mv.status = 'active'
@@ -313,6 +395,12 @@ export async function getPrediction(id: number): Promise<Prediction | null> {
 
 export async function getHistory(id: number): Promise<{ changed_at: string; changes: Record<string, [unknown, unknown]> }[]> {
   await connection();
+  return getHistoryCached(id);
+}
+
+async function getHistoryCached(id: number): Promise<{ changed_at: string; changes: Record<string, [unknown, unknown]> }[]> {
+  "use cache";
+  cacheLife("live");
   return query(
     `SELECT changed_at, changes FROM detection_history WHERE detection_id = $1 ORDER BY changed_at`, [id],
   );
@@ -326,6 +414,12 @@ export type Neighbour = {
 /** Detections within radiusM and ±48 h of a detection (distance on the sphere). */
 export async function getNeighbours(id: number, radiusM = 2000): Promise<Neighbour[]> {
   await connection();
+  return getNeighboursCached(id, radiusM);
+}
+
+async function getNeighboursCached(id: number, radiusM: number): Promise<Neighbour[]> {
+  "use cache";
+  cacheLife("live");
   return query<Neighbour>(
     `SELECT v.id, round((ST_Distance(v.geom::geography, d.geom::geography, false) / 1000)::numeric, 2)::float8 AS dist_km,
             round(extract(epoch FROM v.observed_at - d.observed_at) / 60)::int AS dt_min,
@@ -351,6 +445,12 @@ export type Hotspot = {
 
 export async function getHotspot(id: number): Promise<Hotspot | null> {
   await connection();
+  return getHotspotCached(id);
+}
+
+async function getHotspotCached(id: number): Promise<Hotspot | null> {
+  "use cache";
+  cacheLife("live");
   const [row] = await query<Hotspot>(
     `SELECT h.id, h.first_observed_at, h.last_observed_at, h.detection_count, h.total_frp_mw, h.max_frp_mw,
             h.status, h.algorithm, coalesce(r.name_ru, r.name) AS region_name,
@@ -373,6 +473,12 @@ export async function getHotspot(id: number): Promise<Hotspot | null> {
 
 export async function getHotspotDetections(id: number): Promise<DetectionRow[]> {
   await connection();
+  return getHotspotDetectionsCached(id);
+}
+
+async function getHotspotDetectionsCached(id: number): Promise<DetectionRow[]> {
+  "use cache";
+  cacheLife("live");
   return query<DetectionRow>(
     `SELECT ${ROW_COLUMNS} FROM v_detections_public WHERE cluster_id = $1
      ORDER BY observed_at, id LIMIT 2000`, [id],
@@ -382,6 +488,12 @@ export async function getHotspotDetections(id: number): Promise<DetectionRow[]> 
 /** Hourly counts and FRP between the first and last detection of a hotspot (max 14 days). */
 export async function getHotspotHourly(id: number): Promise<Point[]> {
   await connection();
+  return getHotspotHourlyCached(id);
+}
+
+async function getHotspotHourlyCached(id: number): Promise<Point[]> {
+  "use cache";
+  cacheLife("live");
   return query<Point>(
     `SELECT g AS t, count(d.id)::int AS n, coalesce(sum(d.frp_mw), 0)::float8 AS frp
      FROM hotspot_clusters h
@@ -407,6 +519,12 @@ export type RegionStat = { id: number; name: string; geometry: GeoJSON.Geometry;
 /** Regions (simplified boundaries) with one metric over the last N days. */
 export async function getRegionStats(days: number, metric: RegionMetric): Promise<RegionStat[]> {
   await connection();
+  return getRegionStatsCached(days, metric);
+}
+
+async function getRegionStatsCached(days: number, metric: RegionMetric): Promise<RegionStat[]> {
+  "use cache";
+  cacheLife("live");
   const expr = {
     count: "count(v.id)",
     frp: "coalesce(sum(v.frp_mw), 0)",
@@ -429,39 +547,47 @@ export type Notification = { kind: "risk" | "hotspot" | "source" | "run"; title:
 /** Notifications derived from the current database state; nothing is stored or invented. */
 export async function getNotifications(): Promise<Notification[]> {
   await connection();
+  return getNotificationsCached();
+}
+
+async function getNotificationsCached(): Promise<Notification[]> {
+  "use cache";
+  cacheLife("live");
   const out: Notification[] = [];
-  const [risk] = await query<{ n: number; last: string | null }>(
-    `SELECT count(*)::int AS n, max(observed_at) AS last FROM v_detections_public
-     WHERE risk_level IN ('high', 'very_high') AND observed_at >= now() - interval '24 hours'`,
-  );
+  const [[risk], growing, late, [run]] = await Promise.all([
+    query<{ n: number; last: string | null }>(
+      `SELECT count(*)::int AS n, max(observed_at) AS last FROM v_detections_public
+       WHERE risk_level IN ('high', 'very_high') AND observed_at >= now() - interval '24 hours'`,
+    ),
+    query<{ id: number; n: number; region: string | null; last: string }>(
+      `SELECT h.id, count(d.id)::int AS n, coalesce(r.name_ru, r.name) AS region, max(d.observed_at) AS last
+       FROM hotspot_clusters h JOIN detections d ON d.cluster_id = h.id AND d.observed_at >= now() - interval '6 hours'
+       LEFT JOIN regions r ON r.id = h.region_id
+       WHERE h.status = 'active' GROUP BY h.id, r.name_ru, r.name HAVING count(d.id) >= 3
+       ORDER BY n DESC LIMIT 3`,
+    ),
+    query<{ name: string; last_success_at: string | null; last_status: string | null }>(
+      `SELECT name, last_success_at, last_status FROM v_source_status
+       WHERE enabled AND data_type = 'active_fire'
+         AND (last_success_at IS NULL OR last_success_at < now() - interval '3 hours' OR last_status <> 'ok')`,
+    ),
+    query<{ id: number; status: string; finished_at: string | null }>(
+      `SELECT id, status, finished_at FROM ingestion_runs WHERE trigger <> 'backfill' ORDER BY started_at DESC LIMIT 1`,
+    ),
+  ]);
   if (risk?.n) {
     out.push({ kind: "risk", title: `${risk.n} обнаружений с высоким ML-риском за 24 ч`,
-      detail: "ML-оценка · не подтверждённые пожары", at: risk.last, href: "/detections?days=1&risk=high" });
+      detail: "ML-оценка · не подтверждённые пожары", at: risk.last, href: "/detections?days=1&risk=high_plus" });
   }
-  const growing = await query<{ id: number; n: number; region: string | null; last: string }>(
-    `SELECT h.id, count(d.id)::int AS n, coalesce(r.name_ru, r.name) AS region, max(d.observed_at) AS last
-     FROM hotspot_clusters h JOIN detections d ON d.cluster_id = h.id AND d.observed_at >= now() - interval '6 hours'
-     LEFT JOIN regions r ON r.id = h.region_id
-     WHERE h.status = 'active' GROUP BY h.id, r.name_ru, r.name HAVING count(d.id) >= 3
-     ORDER BY n DESC LIMIT 3`,
-  );
   for (const g of growing) {
     out.push({ kind: "hotspot", title: `Потенциальный очаг #${g.id} растёт`,
       detail: `${g.n} обнаружений за 6 ч${g.region ? ` · ${g.region}` : ""}`, at: g.last, href: `/hotspots/${g.id}` });
   }
-  const late = await query<{ name: string; last_success_at: string | null; last_status: string | null }>(
-    `SELECT name, last_success_at, last_status FROM v_source_status
-     WHERE enabled AND data_type = 'active_fire'
-       AND (last_success_at IS NULL OR last_success_at < now() - interval '3 hours' OR last_status <> 'ok')`,
-  );
   for (const s of late) {
     out.push({ kind: "source", title: "Обновление источника задерживается",
       detail: `${s.name}${s.last_status && s.last_status !== "ok" ? ` · последний статус ${s.last_status}` : ""}`,
       at: s.last_success_at, href: "/sources" });
   }
-  const [run] = await query<{ id: number; status: string; finished_at: string | null }>(
-    `SELECT id, status, finished_at FROM ingestion_runs WHERE trigger <> 'backfill' ORDER BY started_at DESC LIMIT 1`,
-  );
   if (run && run.status !== "success") {
     out.push({ kind: "run", title: `Последний сбор: ${run.status}`, detail: `Запуск #${run.id}`, at: run.finished_at, href: "/sources" });
   }
@@ -470,6 +596,12 @@ export async function getNotifications(): Promise<Notification[]> {
 
 export async function getRecentRuns(limit: number) {
   await connection();
+  return getRecentRunsCached(limit);
+}
+
+async function getRecentRunsCached(limit: number) {
+  "use cache";
+  cacheLife("live");
   return query<{ id: number; trigger: string; status: string; started_at: string; finished_at: string | null; error: string | null }>(
     `SELECT id, trigger, status, started_at, finished_at, error FROM ingestion_runs
      ORDER BY started_at DESC LIMIT $1`, [limit],

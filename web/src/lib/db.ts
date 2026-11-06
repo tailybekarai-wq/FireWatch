@@ -17,7 +17,8 @@ function pool(): Pool {
     if (!process.env.DATABASE_URL) loadEnvConfig(path.resolve(process.cwd(), ".."));
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error("DATABASE_URL is not configured");
-    const p = new Pool({ connectionString, max: 5, idleTimeoutMillis: 10_000 });
+    // readers run their queries in parallel (Promise.all); the Neon pooler accepts many clients
+    const p = new Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000 });
     attachDatabasePool(p);
     globalForPool.fwPool = p;
   }

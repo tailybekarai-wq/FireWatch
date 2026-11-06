@@ -1,4 +1,8 @@
-// GeoJSON of real detections for the map. Filters are validated and bound as parameters.
+// Map points for real detections. Filters are validated and bound as parameters.
+// Compact format (about 4x smaller than GeoJSON): `rows` are arrays in the order of `cols`
+// and the client rebuilds GeoJSON. Coordinates are rounded to 1e-4° (~10 m), well below
+// the 375 m VIIRS pixel; time is Unix seconds; region is the regions.id.
+import { cacheLife } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { query } from "@/lib/db";
 
@@ -6,44 +10,55 @@ const MAX_POINTS = 20_000;
 const SATELLITES = new Set(["N20", "N21", "N", "Terra", "Aqua"]);
 const CONFIDENCE = new Set(["low", "nominal", "high"]);
 const RISK = new Set(["very_high", "high", "moderate", "low", "unscored"]);
+const COLS = ["id", "lon", "lat", "s", "c", "f", "t", "rg", "p", "k", "cl"];
+
+type Filter = { days: number; sats: string[]; conf: string[]; risk: string[]; region: number };
+
+async function points(f: Filter): Promise<unknown[][]> {
+  "use cache";
+  cacheLife("live");
+  const params: unknown[] = [f.days];
+  const where = ["d.observed_at >= now() - $1::int * interval '1 day'"];
+  if (f.sats.length) { params.push(f.sats); where.push(`d.satellite = ANY($${params.length})`); }
+  if (f.conf.length) { params.push(f.conf); where.push(`d.confidence_level = ANY($${params.length})`); }
+  if (f.region) { params.push(f.region); where.push(`d.region_id = $${params.length}`); }
+  if (f.risk.length) {
+    params.push(f.risk.filter((r) => r !== "unscored"));
+    where.push(`(d.risk_level = ANY($${params.length})${f.risk.includes("unscored") ? " OR d.risk_level IS NULL" : ""})`);
+  }
+  // p/k: active-model probability and level ('none' when not scored); cl: potential hotspot
+  // one aggregated JSON value: the driver parses a single string instead of 20 000 rows
+  const [row] = await query<{ rows: unknown[][] | null }>(
+    `SELECT json_agg(json_build_array(d.id, round(d.longitude::numeric, 4), round(d.latitude::numeric, 4), d.satellite,
+              d.confidence_level, round(d.frp_mw::numeric, 1), extract(epoch FROM d.observed_at)::bigint,
+              d.region_id, round(d.probability::numeric, 3), coalesce(d.risk_level, 'none'), d.cluster_id)
+              ORDER BY d.observed_at DESC) AS rows
+     FROM (SELECT * FROM v_detections_public d
+           WHERE ${where.join(" AND ")}
+           ORDER BY d.observed_at DESC LIMIT ${MAX_POINTS + 1}) d`,
+    params,
+  );
+  return row?.rows ?? [];
+}
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  const days = Math.min(Math.max(Number(sp.get("days") ?? 1) || 1, 1), 366);
-  const params: unknown[] = [days];
-  const where = ["d.observed_at >= now() - $1::int * interval '1 day'"];
-  const sats = (sp.get("sat") ?? "").split(",").filter((s) => SATELLITES.has(s));
-  if (sats.length) { params.push(sats); where.push(`d.satellite = ANY($${params.length})`); }
-  const conf = (sp.get("conf") ?? "").split(",").filter((c) => CONFIDENCE.has(c));
-  if (conf.length) { params.push(conf); where.push(`d.confidence_level = ANY($${params.length})`); }
+  // sorted, so equivalent filters share one cache entry
+  const list = (k: string, allowed: Set<string>) => (sp.get(k) ?? "").split(",").filter((v) => allowed.has(v)).sort();
   const region = Number(sp.get("region"));
-  if (Number.isInteger(region) && region > 0) { params.push(region); where.push(`d.region_id = $${params.length}`); }
-  const risk = (sp.get("risk") ?? "").split(",").filter((r) => RISK.has(r));
-  if (risk.length) {
-    params.push(risk.filter((r) => r !== "unscored"));
-    where.push(`(d.risk_level = ANY($${params.length})${risk.includes("unscored") ? " OR d.risk_level IS NULL" : ""})`);
-  }
-
+  const f: Filter = {
+    days: Math.min(Math.max(Number(sp.get("days") ?? 1) || 1, 1), 366),
+    sats: list("sat", SATELLITES),
+    conf: list("conf", CONFIDENCE),
+    risk: list("risk", RISK),
+    region: Number.isInteger(region) && region > 0 ? region : 0,
+  };
   try {
-    const rows = await query<{ id: number; lon: number; lat: number; s: string; c: string; f: number | null; t: string;
-      r: string | null; p: number | null; k: string | null; cl: number | null }>(
-      `SELECT d.id, d.longitude AS lon, d.latitude AS lat, d.satellite AS s, d.confidence_level AS c,
-              d.frp_mw AS f, d.observed_at AS t, d.region_name_ru AS r,
-              d.probability AS p, d.risk_level AS k, d.cluster_id AS cl
-       FROM v_detections_public d
-       WHERE ${where.join(" AND ")}
-       ORDER BY d.observed_at DESC LIMIT ${MAX_POINTS + 1}`,
-      params,
-    );
+    const rows = await points(f);
     const truncated = rows.length > MAX_POINTS;
-    const features = rows.slice(0, MAX_POINTS).map((p) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [p.lon, p.lat] },
-      // p/k: active-model probability and level (absent when not scored); cl: potential hotspot
-      properties: { id: p.id, s: p.s, c: p.c, f: p.f, t: p.t, r: p.r, p: p.p, k: p.k ?? "none", cl: p.cl },
-    }));
+    const kept = rows.slice(0, MAX_POINTS);
     return NextResponse.json(
-      { type: "FeatureCollection", features, meta: { count: features.length, truncated, days } },
+      { cols: COLS, rows: kept, meta: { count: kept.length, truncated, days: f.days } },
       { headers: { "Cache-Control": "public, max-age=60" } },
     );
   } catch (error) {
