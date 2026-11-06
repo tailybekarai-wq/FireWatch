@@ -16,24 +16,19 @@
                     ┌──────────────────────────────────────────────┐
                     │  Neon PostgreSQL + PostGIS (Free)            │
                     └───────────────────┬──────────────────────────┘
-                                        │ SQL (read-only роль)
-                                        ▼
-                    ┌──────────────────────────────────────────────┐
-                    │  api/ : FastAPI (Render Free Web Service)    │
-                    │  REST /api/v1, GeoJSON, агрегаты, кэш        │
-                    └───────────────────┬──────────────────────────┘
-                                        │ HTTPS JSON
+                                        │ SQL (TLS, пул)
                                         ▼
                     ┌──────────────────────────────────────────────┐
                     │  web/ : Next.js (Vercel Hobby)               │
-                    │  MapLibre GL, Recharts, shadcn/ui            │
+                    │  серверные компоненты читают БД (pg),        │
+                    │  /api/detections (GeoJSON), MapLibre GL      │
                     └──────────────────────────────────────────────┘
 
   ml/ : обучение офлайн (локально или вручную запускаемый workflow)
         → артефакт модели (GitHub Release) + запись в ml_model_versions
 ```
 
-Ключевое решение: **тяжёлая обработка (сбор данных и ML-скоринг) не выполняется в веб-сервере.** Она идёт в GitHub Actions по расписанию. API только читает из БД, поэтому остаётся лёгким и умещается в бесплатный тариф.
+Ключевое решение: **тяжёлая обработка (сбор данных и ML-скоринг) не выполняется в веб-сервере.** Она идёт в GitHub Actions по расписанию. Сайт только читает из БД, поэтому остаётся лёгким и умещается в бесплатный тариф. Отдельный API-сервис не используется (ADR-5).
 
 ## 2. Модули
 
@@ -41,15 +36,14 @@
 |---|---|---|
 | `pipeline/sources/firms.py` | HTTP-клиент FIRMS, повторные попытки, учёт лимита | httpx, tenacity |
 | `pipeline/sources/openmeteo.py` | Погода по ячейкам сетки, кэш | httpx |
-| `pipeline/validate.py` | Pydantic-схемы строк CSV, отклонение некорректных | pydantic v2 |
-| `pipeline/normalize.py` | Единая модель обнаружения (VIIRS и MODIS), UTC, уровни confidence | pandas |
-| `pipeline/load.py` | Upsert с ключом дедупликации, история версий | SQLAlchemy Core, psycopg 3 |
-| `pipeline/enrich.py` | Регион (ST_Intersects), кластеризация (ST_ClusterDBSCAN), погода | PostGIS SQL |
+| `pipeline/firms_parse.py` | Проверка и нормализация строк CSV (VIIRS и MODIS), UTC, уровни confidence, отклонение некорректных | csv, stdlib |
+| `pipeline/load.py` | Фильтр по границе страны, регион (ST_Intersects), upsert с ключом дедупликации, история версий, замена NRT на SP | psycopg 3, PostGIS SQL |
+| `pipeline/weather.py` | Погода по ячейкам 0,25° для часа обнаружения | psycopg 3 |
+| `pipeline/cluster.py` | Потенциальные очаги (ST_ClusterDBSCAN, 750 м, окно 72 часа) | PostGIS SQL |
 | `pipeline/score.py` | Загрузка активной модели, расчёт признаков, запись прогнозов | lightgbm, numpy |
-| `pipeline/run.py` | Оркестрация шагов, журнал запуска, код выхода | — |
-| `ml/` | Сбор обучающей выборки, обучение, валидация, отчёт, регистрация | pandas, scikit-learn, lightgbm, geopandas, rasterio, earthaccess |
-| `api/` | REST, валидация параметров, агрегаты, CORS, rate limit | FastAPI, Pydantic, SQLAlchemy, slowapi |
-| `web/` | UI | Next.js (App Router), TypeScript, Tailwind, shadcn/ui, MapLibre GL JS, Recharts, TanStack Query |
+| `pipeline/run.py`, `backfill.py` | Оркестрация шагов, журнал запуска, код выхода; загрузка истории | — |
+| `ml/` | Сбор обучающей выборки, обучение, валидация, отчёт, регистрация | pandas, scikit-learn, lightgbm |
+| `web/` | UI и чтение БД на сервере (ADR-5) | Next.js (App Router), TypeScript, Tailwind, MapLibre GL JS, pg |
 | `db/migrations` | Схема | Alembic |
 
 ## 3. Решения (ADR)
@@ -85,8 +79,16 @@ Python нужен для ML и геообработки, поэтому один
 - GitHub Actions: `schedule` с минимальным интервалом 5 минут, стандартные runner'ы бесплатны для публичных репозиториев. Минусы: возможны задержки под нагрузкой, и **автоотключение расписания после 60 дней без активности в репозитории** (см. RISKS R-4).
 - Интервал: `*/30 * * * *`. Для NRT с задержкой до 3 часов чаще смысла нет.
 
-### ADR-5. API-хостинг: Render Free Web Service
-- Бесплатно (750 часов в месяц на workspace), нативный Python, деплой из GitHub.
+### ADR-5. API-хостинг — пересмотрено
+**Принятое решение (этап 5, ноябрь 2026): отдельного API-сервиса нет.** Сайт на Next.js читает БД сам: серверные компоненты выполняют SQL через `pg` (пул из `@vercel/functions`), карте точки отдаёт маршрут `web/src/app/api/detections` (GeoJSON, не более 20 000 точек). Причины:
+- нет холодного старта Render (~1 минута) и второго бесплатного сервиса, за которым нужно следить (R-30 снят);
+- все агрегаты уже считаются в PostGIS и витрине `mv_daily_stats`, Python в веб-запросе не нужен;
+- ML-прогнозы лежат в БД (ADR-6), поэтому API не нужен и для модели.
+
+Цена решения: нет публичного REST `/api/v1` из API_SPECIFICATION. Спецификация остаётся контрактом на случай, если внешний API понадобится; тогда он добавляется маршрутами Next.js над теми же запросами `web/src/lib/data.ts`.
+
+Исходный вариант (для истории):
+- Render Free Web Service. Бесплатно (750 часов в месяц на workspace), нативный Python, деплой из GitHub.
 - Ограничение: **засыпает через 15 минут без запросов, холодный старт около 1 минуты.** Для демонстрации это смягчается так:
   1. frontend показывает понятное состояние «Сервер просыпается…», а не ошибку;
   2. перед защитой сервер «будится» вручную;
