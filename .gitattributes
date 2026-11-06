@@ -2,3 +2,5 @@
 *.png binary
 *.jpg binary
 *.ico binary
+# Model artifacts are verified by SHA-256 at scoring time: keep their bytes exact.
+ml/models/*/model.txt -text

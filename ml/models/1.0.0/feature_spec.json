@@ -1,0 +1,62 @@
+{
+  "features": [
+    "frp_mw",
+    "bright_ti4",
+    "bright_ti5",
+    "ti4_minus_ti5",
+    "confidence",
+    "is_night",
+    "scan_km",
+    "track_km",
+    "solar_hour",
+    "doy_sin",
+    "doy_cos",
+    "n_1km_24h",
+    "n_1km_72h",
+    "n_5km_24h",
+    "n_5km_72h",
+    "persist_500m_365d",
+    "frp_5km_72h"
+  ],
+  "context_satellite": "N20",
+  "context": [
+    {
+      "name": "n_1km_24h",
+      "radius_m": 1000.0,
+      "lookback_h": 24.0,
+      "gap_h": 0.0
+    },
+    {
+      "name": "n_1km_72h",
+      "radius_m": 1000.0,
+      "lookback_h": 72.0,
+      "gap_h": 0.0
+    },
+    {
+      "name": "n_5km_24h",
+      "radius_m": 5000.0,
+      "lookback_h": 24.0,
+      "gap_h": 0.0
+    },
+    {
+      "name": "n_5km_72h",
+      "radius_m": 5000.0,
+      "lookback_h": 72.0,
+      "gap_h": 0.0
+    },
+    {
+      "name": "persist_500m_365d",
+      "radius_m": 500.0,
+      "lookback_h": 8760.0,
+      "gap_h": 720.0
+    },
+    {
+      "name": "frp_5km_72h",
+      "radius_m": 5000.0,
+      "lookback_h": 72.0,
+      "gap_h": 0.0
+    }
+  ],
+  "distance": "great circle on a sphere, R = 6371008.8 m",
+  "scored_instrument": "VIIRS"
+}
