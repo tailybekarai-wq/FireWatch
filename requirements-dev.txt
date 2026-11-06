@@ -2,7 +2,7 @@
 -e ./shared
 -e ./pipeline
 -e ./api
--e ./ml
+-e ./ml[train]
 -r db/requirements.txt
 
 ruff>=0.8

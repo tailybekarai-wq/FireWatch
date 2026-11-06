@@ -17,12 +17,19 @@ known-first-party = ["firewatch_shared", "firewatch_pipeline", "firewatch_api", 
 "**/tests/**" = ["S101"]
 # SQL there is assembled only from module constants (column names), never from input.
 "pipeline/src/firewatch_pipeline/load.py" = ["S608"]
+# The evaluation report and the model card text are written in Russian (docs language).
+"ml/src/firewatch_ml/{report,register}.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 packages = ["firewatch_shared", "firewatch_pipeline", "firewatch_api", "firewatch_ml"]
 mypy_path = ["shared/src", "pipeline/src", "api/src", "ml/src"]
+
+[[tool.mypy.overrides]]
+# ML libraries without bundled type information.
+module = ["lightgbm.*", "sklearn.*", "scipy.*", "rasterio.*", "pandas.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["shared/tests", "pipeline/tests", "api/tests", "ml/tests"]

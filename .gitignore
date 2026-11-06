@@ -18,7 +18,8 @@ htmlcov/
 build/
 dist/
 
-# Data and model artifacts (published via GitHub Releases, never committed)
+# Data (rebuilt from public sources, never committed). Model artifacts are small text
+# files committed under ml/models/<version>/ and verified by SHA-256 at scoring time.
 *.parquet
 *.nc
 *.hdf
@@ -26,6 +27,7 @@ dist/
 ml/artifacts/
 ml/data/
 data/raw/
+data/ml/
 
 # Node / Next.js
 node_modules/
