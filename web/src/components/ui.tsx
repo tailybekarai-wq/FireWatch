@@ -64,22 +64,7 @@ export function PageHead({ eyebrow, title, sub, children }: { eyebrow: string; t
   );
 }
 
-export function PeriodSwitch({ base, days, options = [1, 7, 30], extra = "" }: {
-  base: string; days: number; options?: number[]; extra?: string;
-}) {
-  const label = (d: number) => (d === 1 ? "24 ч" : `${d} дн`);
-  return (
-    <div role="group" aria-label="Период" className="glass flex rounded-[14px] p-1">
-      {options.map((d) => (
-        <Link key={d} href={`${base}?days=${d}${extra}`} aria-current={d === days ? "true" : undefined}
-          className="flex h-9 items-center rounded-[10px] px-4 text-[13px] font-medium no-underline"
-          style={{ background: d === days ? "rgba(255,255,255,.10)" : "transparent", color: d === days ? "#EEF3F6" : "#9DAAB5" }}>
-          {label(d)}
-        </Link>
-      ))}
-    </div>
-  );
-}
+export { PeriodSwitch } from "./PeriodSwitch";
 
 /** Live indicator in the top bar: real time of the last successful FIRMS fetch. */
 export async function FreshnessBadge() {

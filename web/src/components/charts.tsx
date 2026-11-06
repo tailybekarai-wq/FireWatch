@@ -11,17 +11,23 @@ export function AreaChart({ values, labels, color = "#3BE38A", height = 220 }: {
   const step = values.length > 1 ? w / (values.length - 1) : w;
   const pts = values.map((v, i) => [i * step, h - (v / max) * (h - 16) - 4] as const);
   const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-  const id = `g${color.slice(1)}`;
+  const sum = values.reduce((a, b) => a + b, 0);
+  // a new series remounts the SVG, which replays the draw-in animation
+  const sig = `${values.length}-${sum}-${max}`;
+  const id = `g${color.slice(1)}-${sig}`;
   const ticks = [0, Math.floor(labels.length / 4), Math.floor(labels.length / 2), Math.floor((3 * labels.length) / 4), labels.length - 1];
   return (
     <figure className="m-0 flex flex-col gap-2">
-      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height }} role="img"
-        aria-label={`График: максимум ${num(max)}, всего ${num(values.reduce((a, b) => a + b, 0))}`}>
+      <svg key={sig} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height }} role="img"
+        aria-label={`График: максимум ${num(max)}, всего ${num(sum)}`}>
         <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity=".25" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>
+          <stop offset="0" stopColor={color} stopOpacity=".25" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient>
+          <clipPath id={`${id}-reveal`}><rect className="chart-reveal" x="0" y="0" width={w} height={h} /></clipPath></defs>
         <g stroke="rgba(255,255,255,.05)"><path d={`M0 ${h * 0.25}h${w}M0 ${h * 0.5}h${w}M0 ${h * 0.75}h${w}`} /></g>
-        {pts.length > 0 && <path d={`${line} L${w} ${h} L0 ${h}Z`} fill={`url(#${id})`} />}
-        <path d={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        <g clipPath={`url(#${id}-reveal)`}>
+          {pts.length > 0 && <path className="chart-fade" d={`${line} L${w} ${h} L0 ${h}Z`} fill={`url(#${id})`} />}
+          <path d={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        </g>
         {values.map((v, i) => (
           <rect key={i} x={i * step - step / 2} y={0} width={step} height={h} fill="transparent">
             <title>{`${labels[i]}: ${num(v)}`}</title>
@@ -45,7 +51,7 @@ export function HBars({ rows, color = "#36D6E7", limit = 10 }: { rows: { label: 
             {r.href ? <a href={r.href} className="truncate text-fg no-underline">{r.label}</a> : <span className="truncate">{r.label}</span>}
             <span className="mono text-fg2">{num(r.n)}</span>
           </span>
-          <span className="h-1.5 rounded-full bg-white/5"><span className="block h-full rounded-full" style={{ width: `${(r.n / max) * 100}%`, background: color, opacity: 0.75 }} /></span>
+          <span className="h-1.5 rounded-full bg-white/5"><span key={r.n} className="bar-grow-x block h-full rounded-full" style={{ width: `${(r.n / max) * 100}%`, background: color, opacity: 0.75 }} /></span>
         </li>
       ))}
     </ul>
@@ -97,7 +103,7 @@ export function VBars({ rows, color = "#FF7A3D" }: { rows: { label: string; n: n
       {rows.map((r) => (
         <div key={r.label} className="flex flex-1 flex-col items-center gap-1.5" title={`${r.label}: ${num(r.n)}`}>
           <span className="mono text-[11px] text-fg2">{num(r.n)}</span>
-          <span className="w-full rounded-t-md" style={{ height: `${Math.max(2, (r.n / max) * 140)}px`, background: color, opacity: 0.75 }} />
+          <span key={r.n} className="bar-grow-y w-full rounded-t-md" style={{ height: `${Math.max(2, (r.n / max) * 140)}px`, background: color, opacity: 0.75 }} />
           <span className="mono text-[10px] text-muted">{r.label}</span>
         </div>
       ))}
