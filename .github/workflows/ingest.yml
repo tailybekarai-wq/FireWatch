@@ -28,7 +28,8 @@ jobs:
           cache-dependency-path: |
             shared/pyproject.toml
             pipeline/pyproject.toml
-      - run: pip install -e ./shared -e ./pipeline
+            ml/pyproject.toml
+      - run: pip install -e ./shared -e ./ml -e ./pipeline
       - name: Run ingestion
         run: python -m firewatch_pipeline.run --trigger "$TRIGGER"
         env:

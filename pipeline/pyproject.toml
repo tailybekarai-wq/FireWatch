@@ -7,9 +7,10 @@ name = "firewatch-pipeline"
 version = "0.1.0"
 description = "FireWatch ingestion pipeline: fetch, validate, store and score satellite detections."
 requires-python = ">=3.12"
-# FIRMS/Open-Meteo client dependencies are added in stages 3-4 (docs/DEVELOPMENT_ROADMAP.md).
+# firewatch-ml (core) provides the shared features and LightGBM for scheduled scoring.
 dependencies = [
     "firewatch-shared",
+    "firewatch-ml",
     "httpx>=0.28",
     "psycopg[binary]>=3.2",
     "shapely>=2.1",

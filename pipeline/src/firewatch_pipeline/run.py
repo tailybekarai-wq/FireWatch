@@ -1,4 +1,4 @@
-"""One scheduled run: FIRMS NRT -> validate -> load -> weather -> foci -> stats.
+"""One scheduled run: FIRMS NRT -> validate -> load -> weather -> foci -> ML score -> stats.
 
 Usage (repo root or GitHub Actions)::
 
@@ -23,7 +23,7 @@ from typing import Any
 
 import psycopg
 
-from firewatch_pipeline import cluster, load, weather
+from firewatch_pipeline import cluster, load, score, weather
 from firewatch_pipeline.firms_parse import FirmsSchemaError, parse_firms_csv
 from firewatch_pipeline.sources.firms import PRODUCTS, FirmsClient, FirmsError, FirmsResponse
 from firewatch_pipeline.sources.openmeteo import OpenMeteoClient, OpenMeteoError
@@ -180,6 +180,15 @@ def _execute(
         weather_ok = False
         errors.append(f"clusters: {exc}")
         log("clusters_failed", error=str(exc))
+
+    try:
+        s = score.score(conn, now, REPO_ROOT)
+        per_source["scoring"] = s.__dict__
+        log("scoring_done", **s.__dict__)
+    except (score.ScoreError, psycopg.Error) as exc:
+        weather_ok = False
+        errors.append(f"scoring: {exc}")
+        log("scoring_failed", error=str(exc))
 
     load.refresh_daily_stats(conn)
     size = load.database_size_bytes(conn)

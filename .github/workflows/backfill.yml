@@ -42,7 +42,8 @@ jobs:
           cache-dependency-path: |
             shared/pyproject.toml
             pipeline/pyproject.toml
-      - run: pip install -e ./shared -e ./pipeline
+            ml/pyproject.toml
+      - run: pip install -e ./shared -e ./ml -e ./pipeline
       - name: Backfill
         run: >-
           python -m firewatch_pipeline.backfill
