@@ -17,7 +17,12 @@ export default function SourcesPage() {
   return (
     <>
       <PageHead eyebrow="Pipeline" title="Источники данных"
-        sub="Откуда берутся данные, когда они обновлялись и что пошло не так. Сбор выполняется GitHub Actions каждые 30 минут." />
+        sub="Откуда берутся данные, когда они обновлялись и что пошло не так. Сбор запускается GitHub Actions по расписанию каждые 30 минут; GitHub может задерживать или пропускать плановые запуски.">
+        <a href="https://github.com/tailybekarai-wq/FireWatch/actions/workflows/ingest.yml" target="_blank" rel="noreferrer" className="btn"
+          title="Ручной запуск сбора FIRMS доступен владельцу репозитория в GitHub Actions (кнопка Run workflow)">
+          Обновить источник вручную ↗
+        </a>
+      </PageHead>
       <Suspense fallback={<Skeleton h={480} />}><Body /></Suspense>
     </>
   );

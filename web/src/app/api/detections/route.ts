@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 const MAX_POINTS = 20_000;
 const SATELLITES = new Set(["N20", "N21", "N", "Terra", "Aqua"]);
 const CONFIDENCE = new Set(["low", "nominal", "high"]);
+const RISK = new Set(["very_high", "high", "moderate", "low", "unscored"]);
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -17,12 +18,19 @@ export async function GET(request: NextRequest) {
   if (conf.length) { params.push(conf); where.push(`d.confidence_level = ANY($${params.length})`); }
   const region = Number(sp.get("region"));
   if (Number.isInteger(region) && region > 0) { params.push(region); where.push(`d.region_id = $${params.length}`); }
+  const risk = (sp.get("risk") ?? "").split(",").filter((r) => RISK.has(r));
+  if (risk.length) {
+    params.push(risk.filter((r) => r !== "unscored"));
+    where.push(`(d.risk_level = ANY($${params.length})${risk.includes("unscored") ? " OR d.risk_level IS NULL" : ""})`);
+  }
 
   try {
-    const rows = await query<{ id: number; lon: number; lat: number; s: string; c: string; f: number | null; t: string; r: string | null }>(
+    const rows = await query<{ id: number; lon: number; lat: number; s: string; c: string; f: number | null; t: string;
+      r: string | null; p: number | null; k: string | null; cl: number | null }>(
       `SELECT d.id, d.longitude AS lon, d.latitude AS lat, d.satellite AS s, d.confidence_level AS c,
-              d.frp_mw AS f, d.observed_at AS t, r.name_ru AS r
-       FROM detections d LEFT JOIN regions r ON r.id = d.region_id
+              d.frp_mw AS f, d.observed_at AS t, d.region_name_ru AS r,
+              d.probability AS p, d.risk_level AS k, d.cluster_id AS cl
+       FROM v_detections_public d
        WHERE ${where.join(" AND ")}
        ORDER BY d.observed_at DESC LIMIT ${MAX_POINTS + 1}`,
       params,
@@ -31,7 +39,8 @@ export async function GET(request: NextRequest) {
     const features = rows.slice(0, MAX_POINTS).map((p) => ({
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [p.lon, p.lat] },
-      properties: { id: p.id, s: p.s, c: p.c, f: p.f, t: p.t, r: p.r },
+      // p/k: active-model probability and level (absent when not scored); cl: potential hotspot
+      properties: { id: p.id, s: p.s, c: p.c, f: p.f, t: p.t, r: p.r, p: p.p, k: p.k ?? "none", cl: p.cl },
     }));
     return NextResponse.json(
       { type: "FeatureCollection", features, meta: { count: features.length, truncated, days } },

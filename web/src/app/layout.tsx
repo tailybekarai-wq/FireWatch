@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Breadcrumb, Dock, MobileNav } from "@/components/Dock";
-import { FreshnessBadge } from "@/components/ui";
+import { FreshnessBadge, Notifications } from "@/components/ui";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin", "cyrillic"] });
@@ -33,6 +33,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </Suspense>
               <Suspense fallback={<span className="skeleton h-[42px] w-44" />}>
                 <FreshnessBadge />
+              </Suspense>
+              <Suspense fallback={<span className="skeleton size-[42px]" />}>
+                <Notifications />
               </Suspense>
             </header>
             <main className="flex min-w-0 flex-col gap-5">{children}</main>

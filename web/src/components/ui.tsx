@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { getFreshness } from "@/lib/data";
+import { getFreshness, getNotifications } from "@/lib/data";
+import { NotificationsMenu } from "./NotificationsMenu";
 import { ago, timeOnly } from "@/lib/format";
 
 export function Panel({ title, sub, action, children, className = "", delay = 0 }: {
@@ -100,6 +101,13 @@ export async function FreshnessBadge() {
       <span className="hidden text-muted lg:inline">({ago(f.lastSuccess)})</span>
     </span>
   );
+}
+
+/** Top-bar notifications computed from the current database state. */
+export async function Notifications() {
+  let items;
+  try { items = await getNotifications(); } catch { return null; }
+  return <NotificationsMenu items={items} />;
 }
 
 export async function StaleBanner() {

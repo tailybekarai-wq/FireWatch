@@ -21,7 +21,9 @@ export function AssessmentBadge({ row }: { row: Pick<DetectionRow, "risk_level" 
   );
 }
 
-export function DetectionTable({ rows, compact = false }: { rows: DetectionRow[]; compact?: boolean }) {
+export function DetectionTable({ rows, compact = false, detailsHref, selected }: {
+  rows: DetectionRow[]; compact?: boolean; detailsHref?: (id: number) => string; selected?: number;
+}) {
   if (!rows.length) {
     return <StateBox title="Нет обнаружений по этим условиям">Расширьте период или сбросьте фильтры.</StateBox>;
   }
@@ -36,7 +38,7 @@ export function DetectionTable({ rows, compact = false }: { rows: DetectionRow[]
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="row">
+            <tr key={r.id} className="row" style={r.id === selected ? { background: "rgba(59,227,138,.08)" } : undefined}>
               <td className="mono">{dateTime(r.observed_at)}</td>
               <td className="mono text-fg2">{coord(r.latitude, r.longitude)}</td>
               <td className="text-fg2">{satLabel(r.satellite)}</td>
@@ -44,7 +46,10 @@ export function DetectionTable({ rows, compact = false }: { rows: DetectionRow[]
               <td className="mono text-right">{dec(r.frp_mw)}</td>
               <td><AssessmentBadge row={r} /></td>
               {!compact && <td className="text-fg2">{r.daynight === "D" ? "день" : "ночь"}</td>}
-              <td className="text-right"><Link href={`/detections/${r.id}`} className="text-xs no-underline">Детали →</Link></td>
+              <td className="text-right">
+                <Link href={detailsHref ? detailsHref(r.id) : `/detections/${r.id}`} scroll={!detailsHref}
+                  aria-label={detailsHref ? `Открыть панель деталей #${r.id}` : undefined} className="text-xs no-underline">Детали →</Link>
+              </td>
             </tr>
           ))}
         </tbody>

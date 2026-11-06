@@ -3,7 +3,10 @@
 import path from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { attachDatabasePool } from "@vercel/functions";
-import { Pool, type QueryResultRow } from "pg";
+import { Pool, types, type QueryResultRow } from "pg";
+
+// bigint ids (int8) arrive as strings by default; every id here is far below 2^53.
+types.setTypeParser(types.builtins.INT8, (v) => Number(v));
 
 const globalForPool = globalThis as unknown as { fwPool?: Pool };
 

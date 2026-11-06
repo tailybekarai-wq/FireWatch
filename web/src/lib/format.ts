@@ -57,3 +57,35 @@ export const RISK: Record<string, { label: string; color: string }> = {
   moderate: { label: "Повышенный", color: "#F2C14E" },
   low: { label: "Низкий", color: "#8A97A2" },
 };
+export const NO_SCORE = { label: "Нет оценки", color: "#5C6873" };
+
+/** Model features in plain words (names match firewatch_ml.features.FEATURES). */
+export const FEATURE_LABELS: Record<string, string> = {
+  frp_mw: "мощность излучения (FRP)",
+  bright_ti4: "яркостная температура TI4",
+  bright_ti5: "яркостная температура TI5",
+  ti4_minus_ti5: "разность TI4 − TI5",
+  confidence: "достоверность FIRMS",
+  is_night: "ночное наблюдение",
+  scan_km: "размер пикселя (scan)",
+  track_km: "размер пикселя (track)",
+  solar_hour: "местное солнечное время",
+  doy_sin: "сезон (день года)",
+  doy_cos: "сезон (день года)",
+  n_1km_24h: "соседи в 1 км за 24 ч",
+  n_1km_72h: "соседи в 1 км за 72 ч",
+  n_5km_24h: "соседи в 5 км за 24 ч",
+  n_5km_72h: "соседи в 5 км за 72 ч",
+  frp_5km_72h: "FRP соседей в 5 км за 72 ч",
+  persist_500m_365d: "постоянный источник в этой точке (за год)",
+};
+
+/** NASA FIRMS Fire Map centred on a point for the day of observation (UTC). */
+export function firmsMapUrl(lat: number, lon: number, at: string) {
+  const day = new Date(at).toISOString().slice(0, 10);
+  return `https://firms.modaps.eosdis.nasa.gov/map/#d:${day};@${lon.toFixed(4)},${lat.toFixed(4)},12.0z`;
+}
+
+const DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+export const windDir = (deg: number | null | undefined) => (deg == null ? "—" : DIRS[Math.round(deg / 45) % 8]);
+export const kmhToMs = (v: number | null | undefined) => (v == null ? null : v / 3.6);

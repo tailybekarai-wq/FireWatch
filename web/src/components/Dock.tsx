@@ -14,7 +14,9 @@ export const NAV = [
 ];
 
 export function activeNav(pathname: string) {
-  return NAV.find((n) => (n.href === "/" ? pathname === "/" : pathname.startsWith(n.href))) ?? NAV[0];
+  // a hotspot page belongs to the map section
+  const path = pathname.startsWith("/hotspots") ? "/map" : pathname;
+  return NAV.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href))) ?? NAV[0];
 }
 
 export function Logo({ size = 26 }: { size?: number }) {
