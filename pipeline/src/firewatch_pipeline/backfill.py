@@ -10,6 +10,9 @@ Requests go in 5-day chunks (the FIRMS DAY_RANGE limit). Responses are cached un
 ``source_fetches`` row says so (``params.from_cache``) with the original request time.
 Loading reuses the scheduled path, so the AOI filter, upsert and history are identical.
 
+An SP load replaces the same satellite's NRT rows for the covered days (R-13), so a month
+is never counted twice. Foci (``cluster``) should be rebuilt for that period afterwards.
+
 Weather is not fetched here: Open-Meteo counts every location as a call, so a year of
 history would exceed the free daily limit. Historical weather for ML is built in stage 6.
 """
@@ -53,6 +56,11 @@ def chunks(start: date, end: date, size: int = MAX_DAY_RANGE) -> Iterator[tuple[
         span = min(size, (end - day).days + 1)
         yield day, span
         day += timedelta(days=span)
+
+
+def nrt_counterpart(source_code: str) -> str | None:
+    """NRT source replaced by an SP source of the same satellite (R-13), else None."""
+    return source_code.removesuffix("_SP") + "_NRT" if source_code.endswith("_SP") else None
 
 
 def cache_path(cache_dir: Path, product: FirmsProduct, day: date, span: int) -> Path:
@@ -104,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
     firms: FirmsClient | None = None
 
     with psycopg.connect(db_url, autocommit=True) as conn:
-        source_id = load.source_ids(conn)[product.source_code]
+        ids = load.source_ids(conn)
+        source_id = ids[product.source_code]
+        nrt_id = ids.get(nrt_counterpart(product.source_code) or "")
         run_id = load.start_run(
             conn, "backfill", os.environ.get("GITHUB_SHA"), os.environ.get("GITHUB_RUN_ID")
         )
@@ -123,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             "unchanged": 0,
             "outside_aoi": 0,
             "rejected": 0,
+            "nrt_replaced": 0,
         }
         errors: list[str] = []
         try:
@@ -145,6 +156,13 @@ def main(argv: list[str] | None = None) -> int:
                 totals["chunks"] += 1
                 for key in ("inserted", "updated", "unchanged", "outside_aoi", "rejected"):
                     totals[key] += int(stats[key])
+                if nrt_id is not None:
+                    start = datetime.combine(day, datetime.min.time(), tzinfo=UTC)
+                    totals["nrt_replaced"] += load.replace_nrt_with_sp(
+                        conn, nrt_id, source_id, start, start + timedelta(days=span)
+                    )
+            if totals["nrt_replaced"]:
+                totals["empty_clusters_removed"] = load.delete_empty_clusters(conn)
             load.refresh_daily_stats(conn)
         except Exception as exc:
             load.finish_run(conn, run_id, RunStatus.FAILED, totals, f"unexpected: {exc!r}"[:4000])

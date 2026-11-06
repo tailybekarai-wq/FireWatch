@@ -99,6 +99,16 @@ def test_backfill_chunks_cover_range_exactly() -> None:
     assert sum(span for _, span in year) == 365
 
 
+def test_sp_replaces_nrt_of_same_satellite() -> None:
+    for code in PRODUCTS:
+        counterpart = backfill.nrt_counterpart(code)
+        if code.endswith("_SP"):
+            assert counterpart in PRODUCTS
+            assert PRODUCTS[counterpart].processing == "NRT"
+        else:
+            assert counterpart is None
+
+
 def test_cached_response_is_redacted_and_marked(tmp_path: Any) -> None:
     product = PRODUCTS["FIRMS_VIIRS_NOAA20_SP"]
     path = backfill.cache_path(tmp_path, product, date(2025, 8, 15), 5)

@@ -293,6 +293,41 @@ def load_detections(
     )
 
 
+def replace_nrt_with_sp(
+    conn: psycopg.Connection[Any],
+    nrt_source_id: int,
+    sp_source_id: int,
+    start: datetime,
+    end: datetime,
+) -> int:
+    """Delete NRT detections in [start, end) that the SP archive now covers (R-13).
+
+    NRT and SP rows of one satellite have different dedup keys, so both would be counted.
+    Only NRT up to the last SP observation in the window is removed: a window where SP is
+    not published yet (or holds no fires) keeps its NRT rows.
+    """
+    with conn.transaction():
+        cur = conn.execute(
+            """DELETE FROM detections
+               WHERE source_id = %(nrt)s AND observed_at >= %(start)s AND observed_at < %(end)s
+                 AND observed_at <= (SELECT max(observed_at) FROM detections
+                                     WHERE source_id = %(sp)s AND observed_at >= %(start)s
+                                       AND observed_at < %(end)s)""",
+            {"nrt": nrt_source_id, "sp": sp_source_id, "start": start, "end": end},
+        )
+        return cur.rowcount
+
+
+def delete_empty_clusters(conn: psycopg.Connection[Any]) -> int:
+    with conn.transaction():
+        return conn.execute(
+            """DELETE FROM hotspot_clusters h
+               WHERE NOT EXISTS (SELECT 1 FROM detections d WHERE d.cluster_id = h.id)
+                 AND NOT EXISTS (SELECT 1 FROM burned_area_assessments b
+                                 WHERE b.cluster_id = h.id)"""
+        ).rowcount
+
+
 def refresh_daily_stats(conn: psycopg.Connection[Any]) -> None:
     conn.execute("SELECT refresh_daily_stats()")
     conn.commit()
