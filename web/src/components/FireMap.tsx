@@ -11,6 +11,7 @@ import type { Focus } from "@/lib/data";
 import { CONFIDENCE, NO_SCORE, RISK, SATELLITES, coord, dateTime, dec, firmsMapUrl, satLabel } from "@/lib/format";
 import { BasemapToggle } from "./BasemapToggle";
 import { MAP_ATTRIBUTION, MAP_STYLE, addSatellite, pulse, setSatellite } from "./mapStyle";
+import { useI18n } from "@/components/I18nProvider";
 
 const PERIODS = [{ d: 1, label: "24 часа" }, { d: 3, label: "3 дня" }, { d: 7, label: "7 дней" }, { d: 30, label: "30 дней" }];
 const RISK_KEYS = ["very_high", "high", "moderate", "low", "none"] as const;
@@ -44,6 +45,7 @@ function readProps(raw: Record<string, unknown>): Props {
 }
 
 export function FireMap({ regions, model, focus }: { regions: { id: number; name: string }[]; model: string | null; focus: Focus | null }) {
+  const { t } = useI18n();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const data = useRef<Feature[]>([]);
@@ -183,63 +185,63 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
     <div className="relative h-[calc(100vh-150px)] min-h-[560px] overflow-hidden rounded-[28px] border border-white/5 bg-[#070C10]">
       {/* .maplibregl-map sets position:relative, so positioning lives on a wrapper */}
       <div className="absolute inset-0">
-        <div ref={container} className="h-full w-full" aria-label="Карта спутниковых обнаружений" />
+        <div ref={container} className="h-full w-full" aria-label={t("Карта спутниковых обнаружений")} />
       </div>
       <BasemapToggle satellite={satellite} onChange={setSat} className="absolute bottom-4 left-1/2 -translate-x-1/2" />
 
-      <aside aria-label="Фильтры карты" className="glass rise absolute left-4 top-4 flex max-h-[calc(100%-32px)] w-[300px] max-w-[calc(100%-32px)] flex-col gap-4 overflow-y-auto rounded-[22px] p-[18px]">
+      <aside aria-label={t("Фильтры карты")} className="glass rise absolute left-4 top-4 flex max-h-[calc(100%-32px)] w-[300px] max-w-[calc(100%-32px)] flex-col gap-4 overflow-y-auto rounded-[22px] p-[18px]">
         <div className="flex items-center justify-between">
-          <h2 className="m-0 text-[17px] font-semibold tracking-tight">Фильтры</h2>
-          <button type="button" onClick={reset} className="btn h-[30px] px-2.5 text-xs">Сбросить</button>
+          <h2 className="m-0 text-[17px] font-semibold tracking-tight">{t("Фильтры")}</h2>
+          <button type="button" onClick={reset} className="btn h-[30px] px-2.5 text-xs">{t("Сбросить")}</button>
         </div>
-        <div role="group" aria-label="Режим просмотра" className="grid grid-cols-2 gap-1.5 rounded-[13px] bg-white/[.03] p-1">
+        <div role="group" aria-label={t("Режим просмотра")} className="grid grid-cols-2 gap-1.5 rounded-[13px] bg-white/[.03] p-1">
           {(["map", "list"] as const).map((v) => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); refreshList(); }}
               className="h-8 rounded-[10px] text-xs font-medium"
               style={{ background: view === v ? "rgba(255,255,255,.10)" : "transparent", color: view === v ? "#EEF3F6" : "#9DAAB5" }}>
-              {v === "map" ? "Карта" : "Список"}
+              {v === "map" ? t("Карта") : t("Список")}
             </button>
           ))}
         </div>
-        <div role="group" aria-label="Период" className="grid grid-cols-2 gap-1.5">
+        <div role="group" aria-label={t("Период")} className="grid grid-cols-2 gap-1.5">
           {PERIODS.map((p) => (
             <button key={p.d} type="button" aria-pressed={days === p.d} onClick={() => setDays(p.d)}
               className="h-[38px] rounded-[11px] border text-xs font-medium"
               style={{ borderColor: days === p.d ? "rgba(59,227,138,.45)" : "rgba(255,255,255,.07)",
                 background: days === p.d ? "rgba(59,227,138,.14)" : "rgba(255,255,255,.03)", color: days === p.d ? "#EEF3F6" : "#9DAAB5" }}>
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
-        {!PERIODS.some((p) => p.d === days) && <span className="text-xs text-fg2">Период: {days} дн — чтобы показать выбранное обнаружение</span>}
-        <label className="flex flex-col gap-1.5 text-xs text-fg2">Цвет точек
-          <select className="field" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-            <option value="ml" disabled={!model}>ML-оценка{model ? ` (модель ${model})` : " — модель не активна"}</option>
-            <option value="firms">Достоверность FIRMS</option>
+        {!PERIODS.some((p) => p.d === days) && <span className="text-xs text-fg2">{t("Период:")}{" "}{days}{" "}{t("дн — чтобы показать выбранное обнаружение")}</span>}
+        <label className="flex flex-col gap-1.5 text-xs text-fg2">{t("Цвет точек")}
+<select className="field" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="ml" disabled={!model}>{t("ML-оценка")}{model ? ` (${t("модель {v}", { v: model })})` : t(" — модель не активна")}</option>
+            <option value="firms">{t("Достоверность FIRMS")}</option>
           </select>
         </label>
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="pb-2 text-xs text-fg2">ML-риск</legend>
+          <legend className="pb-2 text-xs text-fg2">{t("ML-риск")}</legend>
           <div className="flex flex-wrap gap-1.5">
             {RISK_KEYS.map((k) => (
               <button key={k} type="button" className="chip" aria-pressed={risk.includes(k)} onClick={() => toggle(risk, k, setRisk)}>
-                <span className="dot" style={{ background: riskColor(k) }} />{k === "none" ? NO_SCORE.label : RISK[k].label}
+                <span className="dot" style={{ background: riskColor(k) }} />{t(k === "none" ? NO_SCORE.label : RISK[k].label)}
               </button>
             ))}
           </div>
         </fieldset>
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="pb-2 text-xs text-fg2">Достоверность FIRMS</legend>
+          <legend className="pb-2 text-xs text-fg2">{t("Достоверность FIRMS")}</legend>
           <div className="flex flex-wrap gap-1.5">
             {Object.entries(CONFIDENCE).map(([k, c]) => (
               <button key={k} type="button" className="chip" aria-pressed={conf.includes(k)} onClick={() => toggle(conf, k, setConf)}>
-                <span className="dot" style={{ background: c.color }} />{c.label}
+                <span className="dot" style={{ background: c.color }} />{t(c.label)}
               </button>
             ))}
           </div>
         </fieldset>
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="pb-2 text-xs text-fg2">Спутник</legend>
+          <legend className="pb-2 text-xs text-fg2">{t("Спутник")}</legend>
           <div className="flex flex-wrap gap-1.5">
             {["N20", "N21", "Terra", "Aqua"].map((s) => (
               <button key={s} type="button" className="chip" aria-pressed={sats.includes(s)} onClick={() => toggle(sats, s, setSats)}>
@@ -248,37 +250,37 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
             ))}
           </div>
         </fieldset>
-        <label className="flex flex-col gap-1.5 text-xs text-fg2">Регион
-          <select className="field" value={region} onChange={(e) => setRegion(e.target.value)}>
-            <option value="">Весь Казахстан</option>
+        <label className="flex flex-col gap-1.5 text-xs text-fg2">{t("Регион")}
+<select className="field" value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="">{t("Весь Казахстан")}</option>
             {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </label>
         <div className="flex justify-between border-t border-white/5 pt-3 text-xs text-fg2" aria-live="polite">
-          {state === "loading" && <span>Загрузка…</span>}
-          {state === "error" && <span className="text-[#FF4D5E]">Не удалось загрузить данные</span>}
+          {state === "loading" && <span>{t("Загрузка…")}</span>}
+          {state === "error" && <span className="text-[#FF4D5E]">{t("Не удалось загрузить данные")}</span>}
           {state === "ok" && meta && (
-            <>Найдено<span className="mono text-fg">{meta.count.toLocaleString("ru-RU")}{meta.truncated ? "+" : ""}</span></>
+            <>{t("Найдено")}<span className="mono text-fg">{meta.count.toLocaleString("ru-RU")}{meta.truncated ? "+" : ""}</span></>
           )}
         </div>
         {state === "ok" && meta?.count === 0 && (
-          <p className="m-0 text-xs leading-relaxed text-muted">Нет обнаружений по этим условиям. Попробуйте период 7 дней.</p>
+          <p className="m-0 text-xs leading-relaxed text-muted">{t("Нет обнаружений по этим условиям. Попробуйте период 7 дней.")}</p>
         )}
-        {meta?.truncated && <p className="m-0 text-xs text-muted">Показаны последние 20 000 точек — уточните фильтры.</p>}
+        {meta?.truncated && <p className="m-0 text-xs text-muted">{t("Показаны последние 20 000 точек — уточните фильтры.")}</p>}
         <p className="m-0 text-[11px] leading-relaxed text-muted">
           {mode === "ml"
-            ? "Цвет — уровень ML-оценки: вероятность связи с гарью, не подтверждение пожара. Серые — без оценки (MODIS или старше 7 дней)."
-            : "Цвет — достоверность обнаружения FIRMS."} Размер — мощность излучения (FRP).
+            ? t("Цвет — уровень ML-оценки: вероятность связи с гарью, не подтверждение пожара. Серые — без оценки (MODIS или старше 7 дней).")
+            : t("Цвет — достоверность обнаружения FIRMS.")} {t("Размер — мощность излучения (FRP).")}
         </p>
       </aside>
 
       {view === "list" && (
-        <section aria-label="Обнаружения в видимой области" className="glass2 rise absolute bottom-4 right-4 top-4 flex w-[400px] max-w-[calc(100%-32px)] flex-col gap-3 rounded-[22px] p-[18px]">
+        <section aria-label={t("Обнаружения в видимой области")} className="glass2 rise absolute bottom-4 right-4 top-4 flex w-[400px] max-w-[calc(100%-32px)] flex-col gap-3 rounded-[22px] p-[18px]">
           <div className="flex items-baseline justify-between">
-            <h2 className="m-0 text-[17px] font-semibold tracking-tight">В видимой области</h2>
+            <h2 className="m-0 text-[17px] font-semibold tracking-tight">{t("В видимой области")}</h2>
             <span className="mono text-xs text-fg2">{listRows.length.toLocaleString("ru-RU")}{listRows.length >= LIST_LIMIT ? "+" : ""}</span>
           </div>
-          <span className="text-[11px] text-muted">Сначала самый высокий ML-риск, затем новые. Двигайте карту — список обновится.</span>
+          <span className="text-[11px] text-muted">{t("Сначала самый высокий ML-риск, затем новые. Двигайте карту — список обновится.")}</span>
           <div className="-mx-2 min-h-0 flex-1 overflow-y-auto">
             {listRows.length ? (
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -297,53 +299,53 @@ export function FireMap({ regions, model, focus }: { regions: { id: number; name
                 ))}
               </ul>
             ) : (
-              <p className="m-0 px-2 text-xs text-muted">В видимой области обнаружений нет.</p>
+              <p className="m-0 px-2 text-xs text-muted">{t("В видимой области обнаружений нет.")}</p>
             )}
           </div>
         </section>
       )}
 
       {selected && (
-        <aside aria-label="Детали обнаружения" className="glass2 rise absolute right-4 top-4 z-10 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-3.5 rounded-[22px] p-[18px]">
+        <aside aria-label={t("Детали обнаружения")} className="glass2 rise absolute right-4 top-4 z-10 flex w-[340px] max-w-[calc(100%-32px)] flex-col gap-3.5 rounded-[22px] p-[18px]">
           <div className="flex items-start justify-between gap-2.5">
             <div className="flex flex-col gap-1.5">
               <span className="flex flex-wrap items-center gap-2 text-xs font-semibold text-signal">
-                Спутниковое обнаружение
-                {selected.fresh && <span className="rounded-full bg-[#FF7A3D1f] px-2 py-0.5 text-[11px] text-[#FF9A6B]">&lt; 3 ч</span>}
+                {t("Спутниковое обнаружение")}
+                {selected.fresh && <span className="rounded-full bg-[#FF7A3D1f] px-2 py-0.5 text-[11px] text-[#FF9A6B]">{t("< 3 ч")}</span>}
               </span>
               <h2 className="mono m-0 text-lg font-medium">{coord(selected.lat, selected.lon)}</h2>
               <span className="mono text-[11px] text-muted">#{selected.id}{selected.r ? ` · ${selected.r}` : ""}</span>
             </div>
-            <button type="button" aria-label="Закрыть" onClick={() => setSelected(null)} className="btn size-9 p-0">✕</button>
+            <button type="button" aria-label={t("Закрыть")} onClick={() => setSelected(null)} className="btn size-9 p-0">✕</button>
           </div>
           <div className="observation flex flex-col gap-3 rounded-2xl p-3.5">
-            <span className="mono text-[10px] tracking-[.14em] text-signal">НАБЛЮДЕНИЕ СПУТНИКА</span>
+            <span className="mono text-[10px] tracking-[.14em] text-signal">{t("НАБЛЮДЕНИЕ СПУТНИКА")}</span>
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <span className="flex flex-col gap-0.5"><span className="text-muted">Спутник</span>{satLabel(selected.s)}</span>
-              <span className="flex flex-col gap-0.5"><span className="text-muted">FRP</span><span className="mono">{dec(selected.f)} МВт</span></span>
-              <span className="flex flex-col gap-0.5"><span className="text-muted">Наблюдение</span><span className="mono">{dateTime(selected.t)}</span></span>
-              <span className="flex flex-col gap-0.5"><span className="text-muted">Достоверность</span>{CONFIDENCE[selected.c]?.label ?? selected.c}</span>
+              <span className="flex flex-col gap-0.5"><span className="text-muted">{t("Спутник")}</span>{satLabel(selected.s)}</span>
+              <span className="flex flex-col gap-0.5"><span className="text-muted">FRP</span><span className="mono">{dec(selected.f)}{" "}{t("МВт")}</span></span>
+              <span className="flex flex-col gap-0.5"><span className="text-muted">{t("Наблюдение")}</span><span className="mono">{dateTime(selected.t)}</span></span>
+              <span className="flex flex-col gap-0.5"><span className="text-muted">{t("Достоверность")}</span>{t(CONFIDENCE[selected.c]?.label ?? selected.c)}</span>
             </div>
           </div>
           <div className="estimate flex flex-col gap-1.5 rounded-2xl p-3.5">
-            <span className="mono text-[10px] tracking-[.14em] text-[#FF9A6B]">ML-ОЦЕНКА</span>
+            <span className="mono text-[10px] tracking-[.14em] text-[#FF9A6B]">{t("ML-ОЦЕНКА")}</span>
             {selected.p != null && selected.k in RISK ? (
               <span className="flex flex-wrap items-baseline gap-2.5">
                 <span className="mono text-2xl">{Math.round(selected.p * 100)}%</span>
-                <span className="text-xs" style={{ color: RISK[selected.k].color }}>{RISK[selected.k].label}</span>
-                <span className="text-[11px] text-muted">не подтверждение пожара</span>
+                <span className="text-xs" style={{ color: RISK[selected.k].color }}>{t(RISK[selected.k].label)}</span>
+                <span className="text-[11px] text-muted">{t("не подтверждение пожара")}</span>
               </span>
             ) : (
-              <span className="text-xs leading-relaxed text-fg2">Нет оценки: модель оценивает VIIRS за последние 7 дней.</span>
+              <span className="text-xs leading-relaxed text-fg2">{t("Нет оценки: модель оценивает VIIRS за последние 7 дней.")}</span>
             )}
           </div>
           {selected.cl != null && (
             <Link href={`/hotspots/${selected.cl}`} className="flex items-center justify-between rounded-2xl border border-white/5 px-3.5 py-2.5 text-xs text-fg no-underline hover:bg-white/5">
-              <span>Часть потенциального очага <span className="mono">#{selected.cl}</span></span><span>→</span>
+              <span>{t("Часть потенциального очага")}{" "}<span className="mono">#{selected.cl}</span></span><span>→</span>
             </Link>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <Link href={`/detections/${selected.id}`} className="btn btn-primary">Открыть запись</Link>
+            <Link href={`/detections/${selected.id}`} className="btn btn-primary">{t("Открыть запись")}</Link>
             <a href={firmsMapUrl(selected.lat, selected.lon, selected.t)} target="_blank" rel="noreferrer" className="btn">FIRMS ↗</a>
           </div>
         </aside>

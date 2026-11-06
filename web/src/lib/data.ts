@@ -6,6 +6,7 @@
 import { cacheLife } from "next/cache";
 import { connection } from "next/server";
 import { query } from "./db";
+import type { RegionNames } from "./i18n";
 
 export type SourceStatus = {
   code: string; name: string; provider: string; data_type: string; description: string | null;
@@ -129,11 +130,11 @@ export type DetectionRow = {
   id: number; observed_at: string; latitude: number; longitude: number; satellite: string;
   instrument: string; frp_mw: number | null; confidence_level: string; confidence_raw: string;
   daynight: string; region_name: string | null; source_code: string; ingested_at: string;
-  probability: number | null; risk_level: string | null; cluster_id: number | null;
+  probability: number | null; risk_level: string | null; cluster_id: number | null; region_id: number | null;
 };
 
 const ROW_COLUMNS = `id, observed_at, latitude, longitude, satellite, instrument, frp_mw, confidence_level,
-  confidence_raw, daynight, region_name_ru AS region_name, source_code, ingested_at, probability, risk_level, cluster_id`;
+  confidence_raw, daynight, region_name_ru AS region_name, source_code, ingested_at, probability, risk_level, cluster_id, region_id`;
 
 export async function getRecent(limit: number): Promise<DetectionRow[]> {
   await connection();
@@ -234,7 +235,7 @@ async function getDetectionCached(id: number): Promise<DetectionDetail | null> {
   const [row] = await query<DetectionDetail>(
     `SELECT ${ROW_COLUMNS.split(",").map((c) => `v.${c.trim()}`).join(", ")},
             v.bright_main_k, v.bright_aux_k, v.scan_km, v.track_km, v.product_version,
-            v.processing_level, v.fire_type, v.updated_at, v.source_name, v.source_url, v.region_id,
+            v.processing_level, v.fire_type, v.updated_at, v.source_name, v.source_url,
             v.model_name, v.model_version, s.docs_url, (d.observed_at >= now() - interval '3 hours') AS fresh,
             f.request_url_redacted, f.requested_at, f.body_sha256, f.run_id,
             (SELECT to_jsonb(w) FROM (
@@ -273,6 +274,17 @@ async function getFocusCached(id: number): Promise<Focus | null> {
      FROM detections WHERE id = $1`, [id],
   );
   return row ?? null;
+}
+
+export async function getRegionNames(): Promise<RegionNames[]> {
+  await connection();
+  return getRegionNamesCached();
+}
+
+async function getRegionNamesCached(): Promise<RegionNames[]> {
+  "use cache";
+  cacheLife("slow");
+  return query(`SELECT id, name_ru, name_kk, name_en FROM regions ORDER BY id`);
 }
 
 export async function getRegions(): Promise<{ id: number; name: string }[]> {
@@ -437,7 +449,7 @@ async function getNeighboursCached(id: number, radiusM: number): Promise<Neighbo
 export type Hotspot = {
   id: number; first_observed_at: string; last_observed_at: string; detection_count: number;
   total_frp_mw: number | null; max_frp_mw: number | null; status: string; algorithm: string;
-  region_name: string | null; lat: number; lon: number; hull: GeoJSON.Polygon | null;
+  region_id: number | null; region_name: string | null; lat: number; lon: number; hull: GeoJSON.Polygon | null;
   satellites: string[]; max_risk: string | null; scored: number;
   weather: { temperature_2m_c: number | null; relative_humidity_2m_pct: number | null;
     wind_speed_10m_kmh: number | null; wind_direction_10m_deg: number | null; valid_at: string } | null;
@@ -453,7 +465,7 @@ async function getHotspotCached(id: number): Promise<Hotspot | null> {
   cacheLife("live");
   const [row] = await query<Hotspot>(
     `SELECT h.id, h.first_observed_at, h.last_observed_at, h.detection_count, h.total_frp_mw, h.max_frp_mw,
-            h.status, h.algorithm, coalesce(r.name_ru, r.name) AS region_name,
+            h.status, h.algorithm, h.region_id, coalesce(r.name_ru, r.name) AS region_name,
             ST_Y(h.centroid) AS lat, ST_X(h.centroid) AS lon, ST_AsGeoJSON(h.hull, 5)::jsonb AS hull,
             (SELECT array_agg(DISTINCT d.satellite) FROM detections d WHERE d.cluster_id = h.id) AS satellites,
             (SELECT v.risk_level FROM v_detections_public v WHERE v.cluster_id = h.id AND v.risk_level IS NOT NULL
@@ -542,28 +554,32 @@ async function getRegionStatsCached(days: number, metric: RegionMetric): Promise
   );
 }
 
-export type Notification = { kind: "risk" | "hotspot" | "source" | "run"; title: string; detail: string; at: string | null; href: string };
+/** Facts for one notification; the text is composed in the interface language by the caller. */
+export type NotificationFact = {
+  kind: "risk" | "hotspot" | "source" | "run"; at: string | null; href: string;
+  n?: number; id?: number; regionId?: number | null; source?: string; status?: string | null;
+};
+export type Notification = { kind: NotificationFact["kind"]; title: string; detail: string; at: string | null; href: string };
 
 /** Notifications derived from the current database state; nothing is stored or invented. */
-export async function getNotifications(): Promise<Notification[]> {
+export async function getNotifications(): Promise<NotificationFact[]> {
   await connection();
   return getNotificationsCached();
 }
 
-async function getNotificationsCached(): Promise<Notification[]> {
+async function getNotificationsCached(): Promise<NotificationFact[]> {
   "use cache";
   cacheLife("live");
-  const out: Notification[] = [];
+  const out: NotificationFact[] = [];
   const [[risk], growing, late, [run]] = await Promise.all([
     query<{ n: number; last: string | null }>(
       `SELECT count(*)::int AS n, max(observed_at) AS last FROM v_detections_public
        WHERE risk_level IN ('high', 'very_high') AND observed_at >= now() - interval '24 hours'`,
     ),
-    query<{ id: number; n: number; region: string | null; last: string }>(
-      `SELECT h.id, count(d.id)::int AS n, coalesce(r.name_ru, r.name) AS region, max(d.observed_at) AS last
+    query<{ id: number; n: number; region_id: number | null; last: string }>(
+      `SELECT h.id, count(d.id)::int AS n, h.region_id, max(d.observed_at) AS last
        FROM hotspot_clusters h JOIN detections d ON d.cluster_id = h.id AND d.observed_at >= now() - interval '6 hours'
-       LEFT JOIN regions r ON r.id = h.region_id
-       WHERE h.status = 'active' GROUP BY h.id, r.name_ru, r.name HAVING count(d.id) >= 3
+       WHERE h.status = 'active' GROUP BY h.id, h.region_id HAVING count(d.id) >= 3
        ORDER BY n DESC LIMIT 3`,
     ),
     query<{ name: string; last_success_at: string | null; last_status: string | null }>(
@@ -576,20 +592,16 @@ async function getNotificationsCached(): Promise<Notification[]> {
     ),
   ]);
   if (risk?.n) {
-    out.push({ kind: "risk", title: `${risk.n} обнаружений с высоким ML-риском за 24 ч`,
-      detail: "ML-оценка · не подтверждённые пожары", at: risk.last, href: "/detections?days=1&risk=high_plus" });
+    out.push({ kind: "risk", n: risk.n, at: risk.last, href: "/detections?days=1&risk=high_plus" });
   }
   for (const g of growing) {
-    out.push({ kind: "hotspot", title: `Потенциальный очаг #${g.id} растёт`,
-      detail: `${g.n} обнаружений за 6 ч${g.region ? ` · ${g.region}` : ""}`, at: g.last, href: `/hotspots/${g.id}` });
+    out.push({ kind: "hotspot", id: g.id, n: g.n, regionId: g.region_id, at: g.last, href: `/hotspots/${g.id}` });
   }
   for (const s of late) {
-    out.push({ kind: "source", title: "Обновление источника задерживается",
-      detail: `${s.name}${s.last_status && s.last_status !== "ok" ? ` · последний статус ${s.last_status}` : ""}`,
-      at: s.last_success_at, href: "/sources" });
+    out.push({ kind: "source", source: s.name, status: s.last_status, at: s.last_success_at, href: "/sources" });
   }
   if (run && run.status !== "success") {
-    out.push({ kind: "run", title: `Последний сбор: ${run.status}`, detail: `Запуск #${run.id}`, at: run.finished_at, href: "/sources" });
+    out.push({ kind: "run", id: run.id, status: run.status, at: run.finished_at, href: "/sources" });
   }
   return out;
 }

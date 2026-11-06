@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useI18n } from "@/components/I18nProvider";
 
 /**
  * Period tabs with a sliding indicator. The indicator moves on click (before the server
@@ -10,12 +11,13 @@ import { useState } from "react";
 export function PeriodSwitch({ base, days, options = [1, 7, 30], extra = "" }: {
   base: string; days: number; options?: number[]; extra?: string;
 }) {
+  const { t } = useI18n();
   const [pending, setPending] = useState<{ from: number; to: number } | null>(null);
   const active = pending && pending.from === days ? pending.to : days;
   const index = Math.max(0, options.indexOf(active));
-  const label = (d: number) => (d === 1 ? "24 ч" : `${d} дн`);
+  const label = (d: number) => (d === 1 ? t("24 ч") : t("{n} дн", { n: d }));
   return (
-    <div role="group" aria-label="Период" className="glass relative grid rounded-[14px] p-1"
+    <div role="group" aria-label={t("Период")} className="glass relative grid rounded-[14px] p-1"
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       <span aria-hidden="true" className="absolute bottom-1 left-1 top-1 rounded-[10px] transition-transform duration-500"
         style={{

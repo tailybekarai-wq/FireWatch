@@ -7,6 +7,7 @@ import { REGION_RAMP, quartiles, regionClass } from "@/lib/choropleth";
 import { PageHead, Panel, PeriodSwitch, Skeleton, StateBox } from "@/components/ui";
 import { REGION_METRICS, getFrpHistogram, getMonthly, getRegionStats, getSummary, getTimeline, type RegionMetric } from "@/lib/data";
 import { dec, num } from "@/lib/format";
+import { getRegionNamer, getT } from "@/lib/i18n-server";
 
 export const metadata: Metadata = { title: "Аналитика" };
 const ALLOWED = [7, 30, 90, 365];
@@ -19,6 +20,8 @@ export default function AnalyticsPage({ searchParams }: PageProps<"/analytics">)
 }
 
 async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["searchParams"] }) {
+  const { t, locale } = await getT();
+  const regionName = await getRegionNamer(locale);
   const sp = await searchParams;
   const days = ALLOWED.includes(Number(sp.days)) ? Number(sp.days) : 30;
   const metric = (String(sp.metric ?? "") in REGION_METRICS ? String(sp.metric) : "count") as RegionMetric;
@@ -28,7 +31,7 @@ async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["s
       getSummary(days), getTimeline(days), getMonthly(), getFrpHistogram(days), getRegionStats(days, metric),
     ]);
   } catch {
-    return <StateBox tone="error" title="Не удалось загрузить аналитику">База данных недоступна.</StateBox>;
+    return <StateBox tone="error" title={t("Не удалось загрузить аналитику")}>{t("База данных недоступна.")}</StateBox>;
   }
   const years = [...new Set(monthly.map((m) => m.year))];
   const maxMonth = Math.max(1, ...monthly.map((m) => m.n));
@@ -40,19 +43,19 @@ async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["s
 
   return (
     <>
-      <PageHead eyebrow="Аналитика обнаружений" title="Аналитика"
-        sub="Все графики строятся по реальным записям базы. Пустые дни — это действительно ноль обнаружений.">
+      <PageHead eyebrow={t("Аналитика обнаружений")} title={t("Аналитика")}
+        sub={t("Все графики строятся по реальным записям базы. Пустые дни — это действительно ноль обнаружений.")}>
         <PeriodSwitch base="/analytics" days={days} options={ALLOWED} extra={`&metric=${metric}`} />
       </PageHead>
-      <Panel title="Обнаружения по дням" sub={`${num(summary.period)} за ${days} дн`}>
+      <Panel title={t("Обнаружения по дням")} sub={t("{n} за {d} дн", { n: num(summary.period), d: days })}>
         <AreaChart values={timeline.points.map((p) => p.n)} labels={labels} color="#36D6E7" />
       </Panel>
-      <Panel title="Карта регионов" sub={`${m.label}${m.unit ? `, ${m.unit}` : ""} · за ${days} дн · по областям`}
+      <Panel title={t("Карта регионов")} sub={`${t(m.label)}${m.unit ? `, ${t(m.unit)}` : ""} · ${t("за {d} дн · по областям", { d: days })}`}
         action={
-          <div role="group" aria-label="Метрика" className="flex flex-wrap gap-1.5">
+          <div role="group" aria-label={t("Метрика")} className="flex flex-wrap gap-1.5">
             {(Object.keys(REGION_METRICS) as RegionMetric[]).map((k) => (
               <Link key={k} href={`/analytics?days=${days}&metric=${k}`} aria-current={k === metric ? "true" : undefined} className="chip no-underline">
-                {REGION_METRICS[k].label}
+                {t(REGION_METRICS[k].label)}
               </Link>
             ))}
           </div>
@@ -60,24 +63,24 @@ async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["s
         <div className="grid gap-5 xl:grid-cols-[3fr_2fr]">
           <div className="flex min-w-0 flex-col gap-2">
             <RegionMap unit={m.unit} breaks={breaks}
-              regions={regions.map((r) => ({ id: r.id, name: r.name, geometry: r.geometry, value: r.value, label: fmt(r.value) }))} />
+              regions={regions.map((r) => ({ id: r.id, name: regionName(r.id, r.name) ?? r.name, geometry: r.geometry, value: r.value, label: fmt(r.value) }))} />
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
               <span className="flex items-center gap-1.5"><span className="dot" style={{ background: REGION_RAMP[0] }} />0</span>
               {breaks.map((b, i) => (
                 <span key={i} className="flex items-center gap-1.5"><span className="dot" style={{ background: REGION_RAMP[i + 1] }} />≤ {fmt(b)}</span>
               ))}
               <span className="flex items-center gap-1.5"><span className="dot" style={{ background: REGION_RAMP[4] }} />&gt; {fmt(breaks[2])}</span>
-              <span>· квартили по областям с ненулевым значением</span>
+              <span>{t("· квартили по областям с ненулевым значением")}</span>
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-fg2">{metric === "med_frp" ? "Значение по области" : "Доля от общего"}</span>
+            <span className="text-xs text-fg2">{metric === "med_frp" ? t("Значение по области") : t("Доля от общего")}</span>
             <ul className="m-0 flex max-h-[420px] list-none flex-col gap-1 overflow-y-auto p-0 text-[13px]">
               {regions.map((r) => (
                 <li key={r.id}>
                   <Link href={`/detections?days=${days}&region=${r.id}`} className="row grid grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-lg px-2 py-1.5 text-fg no-underline">
                     <span className="dot" style={{ background: REGION_RAMP[regionClass(r.value, breaks)] }} />
-                    <span className="truncate">{r.name}</span>
+                    <span className="truncate">{regionName(r.id, r.name)}</span>
                     <span className="mono text-xs text-fg2">{fmt(r.value)}{metric !== "med_frp" && total > 0 ? ` · ${dec((100 * r.value) / total)}%` : ""}</span>
                   </Link>
                 </li>
@@ -87,20 +90,20 @@ async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["s
         </div>
       </Panel>
       <div className="grid gap-5 xl:grid-cols-3">
-        <Panel title="Регионы" sub="Распределение по областям" delay={0.05}>
-          <HBars rows={summary.topRegions.map((r) => ({ label: r.name, n: r.n, href: `/detections?days=${days}&region=${r.id}` }))} limit={20} />
+        <Panel title={t("Регионы")} sub={t("Распределение по областям")} delay={0.05}>
+          <HBars rows={summary.topRegions.map((r) => ({ label: regionName(r.id, r.name) ?? r.name, n: r.n, href: `/detections?days=${days}&region=${r.id}` }))} limit={20} />
         </Panel>
-        <Panel title="Спутники" sub="Доля платформ" delay={0.1}>
-          {summary.bySatellite.length ? <OrbitRings rows={summary.bySatellite} /> : <StateBox title="Нет данных" />}
+        <Panel title={t("Спутники")} sub={t("Доля платформ")} delay={0.1}>
+          {summary.bySatellite.length ? <OrbitRings rows={summary.bySatellite} /> : <StateBox title={t("Нет данных")} />}
         </Panel>
-        <Panel title="Мощность излучения (FRP)" sub="Число обнаружений по диапазонам, МВт" delay={0.15}>
+        <Panel title={t("Мощность излучения (FRP)")} sub={t("Число обнаружений по диапазонам, МВт")} delay={0.15}>
           <VBars rows={frp.map((b) => ({ label: b.bucket, n: b.n }))} />
         </Panel>
       </div>
-      <Panel title="Сезонность" sub="Обнаружения по месяцам · чем ярче ячейка, тем больше обнаружений">
+      <Panel title={t("Сезонность")} sub={t("Обнаружения по месяцам · чем ярче ячейка, тем больше обнаружений")}>
         <div className="overflow-x-auto">
           <table className="data min-w-[720px]">
-            <thead><tr><th>Год</th>{MONTHS.map((m) => <th key={m} className="text-center">{m}</th>)}</tr></thead>
+            <thead><tr><th>{t("Год")}</th>{MONTHS.map((m) => <th key={m} className="text-center">{t(m)}</th>)}</tr></thead>
             <tbody>
               {years.map((y) => (
                 <tr key={y}>
@@ -108,7 +111,7 @@ async function Body({ searchParams }: { searchParams: PageProps<"/analytics">["s
                   {MONTHS.map((_, i) => {
                     const n = monthly.find((m) => m.year === y && m.month === i + 1)?.n;
                     return (
-                      <td key={i} className="mono text-center text-xs" title={n != null ? `${MONTHS[i]} ${y}: ${num(n)}` : "нет данных"}
+                      <td key={i} className="mono text-center text-xs" title={n != null ? `${t(MONTHS[i])} ${y}: ${num(n)}` : t("нет данных")}
                         style={{ background: n ? `rgba(255,122,61,${0.08 + 0.6 * (n / maxMonth)})` : "transparent" }}>
                         {n != null ? num(n) : "—"}
                       </td>

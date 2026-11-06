@@ -5,11 +5,13 @@ import { AttributionControl, LngLatBounds, Map as MapLibre, Popup } from "maplib
 import { useEffect, useRef } from "react";
 import { REGION_RAMP, regionClass } from "@/lib/choropleth";
 import { MAP_ATTRIBUTION, MAP_STYLE, addSatellite } from "./mapStyle";
+import { useI18n } from "@/components/I18nProvider";
 
 export type RegionShape = { id: number; name: string; geometry: GeoJSON.Geometry; value: number; label: string };
 
 /** Regions coloured by quantile class of one metric. */
 export function RegionMap({ regions, breaks, unit }: { regions: RegionShape[]; breaks: number[]; unit: string }) {
+  const { t } = useI18n();
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function RegionMap({ regions, breaks, unit }: { regions: RegionShape[]; b
 
   return (
     <div className="relative h-[420px] overflow-hidden rounded-2xl border border-white/5 bg-[#070C10]">
-      <div className="absolute inset-0"><div ref={container} className="h-full w-full" aria-label="Карта регионов по выбранной метрике" /></div>
+      <div className="absolute inset-0"><div ref={container} className="h-full w-full" aria-label={t("Карта регионов по выбранной метрике")} /></div>
     </div>
   );
 }

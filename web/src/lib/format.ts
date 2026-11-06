@@ -25,14 +25,18 @@ export function timeOnly(value: Date | string | null | undefined) {
   return new Date(value).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 }
 
-export function ago(value: Date | string | null | undefined, now = new Date()) {
-  if (!value) return "нет данных";
+type Tr = (ru: string, vars?: Record<string, string | number>) => string;
+const asIs: Tr = (ru, vars) => (vars ? Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), ru) : ru);
+
+/** "5 мин назад"; pass the interface translator to localise. */
+export function ago(value: Date | string | null | undefined, t: Tr = asIs, now = new Date()) {
+  if (!value) return t("нет данных");
   const minutes = Math.round((now.getTime() - new Date(value).getTime()) / 60_000);
-  if (minutes < 1) return "только что";
-  if (minutes < 60) return `${minutes} мин назад`;
+  if (minutes < 1) return t("только что");
+  if (minutes < 60) return t("{n} мин назад", { n: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} ч назад`;
-  return `${Math.round(hours / 24)} дн назад`;
+  if (hours < 48) return t("{n} ч назад", { n: hours });
+  return t("{n} дн назад", { n: Math.round(hours / 24) });
 }
 
 export const SATELLITES: Record<string, { label: string; color: string }> = {

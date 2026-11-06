@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "./I18nProvider";
 
 export const NAV = [
   { href: "/", label: "Обзор", section: "Мониторинг", d: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z" },
@@ -31,10 +32,11 @@ export function Logo({ size = 26 }: { size?: number }) {
 }
 
 export function Dock() {
+  const { t } = useI18n();
   const pathname = usePathname();
   const active = activeNav(pathname);
   return (
-    <nav aria-label="Основная навигация"
+    <nav aria-label={t("Основная навигация")}
       className="glass sticky top-4 z-20 m-4 mr-0 hidden h-[calc(100vh-32px)] w-[232px] shrink-0 flex-col gap-1.5 rounded-3xl px-2.5 py-3.5 md:flex">
       <Link href="/" className="mb-2.5 flex h-[52px] items-center gap-3 px-1.5 text-fg no-underline hover:text-fg">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-[13px] border border-white/10"
@@ -43,7 +45,7 @@ export function Dock() {
         </span>
         <span className="flex flex-col">
           <span className="text-base font-semibold tracking-tight">FireWatch</span>
-          <span className="text-[11px] text-muted">Спутниковый мониторинг</span>
+          <span className="text-[11px] text-muted">{t("Спутниковый мониторинг")}</span>
         </span>
       </Link>
       {NAV.map((item) => {
@@ -61,7 +63,7 @@ export function Dock() {
               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: on ? "#3BE38A" : "#8C9AA6" }}>
               <path d={item.d} />
             </svg>
-            {item.label}
+            {t(item.label)}
           </Link>
         );
       })}
@@ -70,10 +72,11 @@ export function Dock() {
 }
 
 export function MobileNav() {
+  const { t } = useI18n();
   const pathname = usePathname();
   const active = activeNav(pathname);
   return (
-    <nav aria-label="Навигация" className="glass2 fixed inset-x-3 bottom-3 z-30 flex justify-around rounded-2xl px-1 py-1.5 md:hidden">
+    <nav aria-label={t("Навигация")} className="glass2 fixed inset-x-3 bottom-3 z-30 flex justify-around rounded-2xl px-1 py-1.5 md:hidden">
       {NAV.slice(0, 5).map((item) => {
         const on = item.href === active.href;
         return (
@@ -82,7 +85,7 @@ export function MobileNav() {
             style={{ color: on ? "#3BE38A" : "#9DAAB5" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={item.d} /></svg>
-            {item.label.split(" ")[0]}
+            {t(item.label).split(" ")[0]}
           </Link>
         );
       })}
@@ -91,14 +94,15 @@ export function MobileNav() {
 }
 
 export function Breadcrumb() {
+  const { t } = useI18n();
   const item = activeNav(usePathname());
   return (
-    <nav aria-label="Хлебные крошки" className="mr-auto flex items-center gap-2 text-[13px] text-muted">
+    <nav aria-label={t("Хлебные крошки")} className="mr-auto flex items-center gap-2 text-[13px] text-muted">
       <Link href="/" className="text-muted no-underline">FireWatch</Link>
       <span aria-hidden="true">›</span>
-      <span>{item.section}</span>
+      <span>{t(item.section)}</span>
       <span aria-hidden="true">›</span>
-      <span className="font-semibold text-fg">{item.label}</span>
+      <span className="font-semibold text-fg">{t(item.label)}</span>
     </nav>
   );
 }

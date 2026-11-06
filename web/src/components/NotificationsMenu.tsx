@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Notification } from "@/lib/data";
 import { ago } from "@/lib/format";
+import { useI18n } from "./I18nProvider";
 
 const KEY = "fw.notifications.read";
 const COLOR: Record<Notification["kind"], string> = { risk: "#FF4D5E", hotspot: "#FF7A3D", source: "#F2C14E", run: "#F2C14E" };
@@ -24,6 +25,7 @@ function subscribe(l: () => void) {
 }
 
 export function NotificationsMenu({ items }: { items: Notification[] }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const raw = useSyncExternalStore(subscribe, readMarks, () => "[]");
@@ -43,7 +45,7 @@ export function NotificationsMenu({ items }: { items: Notification[] }) {
 
   return (
     <div ref={box} className="relative">
-      <button type="button" aria-label={`Уведомления${unread ? `: ${unread} новых` : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}
+      <button type="button" aria-label={unread ? t("Уведомления: {n} новых", { n: unread }) : t("Уведомления")} aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className="btn relative size-[42px] p-0">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
           <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />
@@ -55,11 +57,11 @@ export function NotificationsMenu({ items }: { items: Notification[] }) {
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label="Уведомления" className="glass2 rise absolute right-0 top-[50px] z-40 flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-[20px] p-3">
+        <div role="dialog" aria-label={t("Уведомления")} className="glass2 rise absolute right-0 top-[50px] z-40 flex w-[340px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-[20px] p-3">
           <div className="flex items-center justify-between px-1.5 pt-1">
-            <span className="text-sm font-semibold">Уведомления</span>
+            <span className="text-sm font-semibold">{t("Уведомления")}</span>
             {items.length > 0 && (
-              <button type="button" className="text-xs text-fg2 hover:text-fg" onClick={() => writeMarks(items.map(idOf))}>Отметить прочитанными</button>
+              <button type="button" className="text-xs text-fg2 hover:text-fg" onClick={() => writeMarks(items.map(idOf))}>{t("Отметить прочитанными")}</button>
             )}
           </div>
           {items.length ? (
@@ -71,7 +73,7 @@ export function NotificationsMenu({ items }: { items: Notification[] }) {
                     <span className="dot mt-1.5" style={{ background: COLOR[n.kind] }} />
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span className="text-[13px]">{n.title}</span>
-                      <span className="text-[11px] text-muted">{n.detail}{n.at ? ` · ${ago(n.at)}` : ""}</span>
+                      <span className="text-[11px] text-muted">{n.detail}{n.at ? ` · ${ago(n.at, t)}` : ""}</span>
                     </span>
                   </Link>
                 </li>
@@ -79,7 +81,7 @@ export function NotificationsMenu({ items }: { items: Notification[] }) {
             </ul>
           ) : (
             <p className="m-0 px-1.5 pb-1.5 text-xs leading-relaxed text-muted">
-              Событий нет: за 24 ч нет обнаружений с высоким риском, растущих очагов и задержек источников.
+              {t("Событий нет: за 24 ч нет обнаружений с высоким риском, растущих очагов и задержек источников.")}
             </p>
           )}
         </div>

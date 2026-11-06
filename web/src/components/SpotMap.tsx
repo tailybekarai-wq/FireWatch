@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { dateTime } from "@/lib/format";
 import { BasemapToggle } from "./BasemapToggle";
 import { MAP_ATTRIBUTION, MAP_STYLE, addSatellite, pulse, setSatellite } from "./mapStyle";
+import { useI18n } from "@/components/I18nProvider";
 
 export type SpotPoint = { id: number; lat: number; lon: number; color: string; t: string; href?: string };
 
@@ -30,6 +31,7 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
   center: { lat: number; lon: number }; points: SpotPoint[]; radiusKm?: number; hull?: GeoJSON.Polygon | null;
   focusColor?: string; replay?: boolean; height?: number; label: string;
 }) {
+  const { t } = useI18n();
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const [ready, setReady] = useState(false);
@@ -118,15 +120,15 @@ export function SpotMap({ center, points, radiusKm, hull, focusColor, replay = f
       <BasemapToggle satellite={satellite} onChange={setSat} className="absolute left-4 top-4" />
       {replay && times.length > 1 && (
         <div className="glass absolute inset-x-4 bottom-9 flex items-center gap-2.5 rounded-2xl px-3 py-2 text-xs">
-          <button type="button" className="btn h-8 px-2.5" aria-label="Предыдущий шаг"
+          <button type="button" className="btn h-8 px-2.5" aria-label={t("Предыдущий шаг")}
             onClick={() => { setPlaying(false); setStep((s) => Math.max(0, s - 1)); }}>‹</button>
           <button type="button" className="btn h-8 px-3"
             onClick={() => { if (!playing && step >= times.length - 1) setStep(0); setPlaying((p) => !p); }}>
-            {playing ? "Пауза" : "▶ Повтор"}
+            {playing ? t("Пауза") : t("▶ Повтор")}
           </button>
-          <button type="button" className="btn h-8 px-2.5" aria-label="Следующий шаг"
+          <button type="button" className="btn h-8 px-2.5" aria-label={t("Следующий шаг")}
             onClick={() => { setPlaying(false); setStep((s) => Math.min(times.length - 1, s + 1)); }}>›</button>
-          <input type="range" min={0} max={times.length - 1} value={Math.min(step, times.length - 1)} aria-label="Момент наблюдения"
+          <input type="range" min={0} max={times.length - 1} value={Math.min(step, times.length - 1)} aria-label={t("Момент наблюдения")}
             onChange={(e) => { setPlaying(false); setStep(Number(e.target.value)); }} className="min-w-0 flex-1 accent-[#FF7A3D]" />
           <span className="mono whitespace-nowrap text-fg2">{dateTime(until)}</span>
         </div>

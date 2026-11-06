@@ -8,6 +8,7 @@ import { SpotMap } from "@/components/SpotMap";
 import { Kpi, Panel, Skeleton, StateBox } from "@/components/ui";
 import { getHotspot, getHotspotDetections, getHotspotHourly } from "@/lib/data";
 import { CONFIDENCE, NO_SCORE, RISK, coord, dateTime, dec, kmhToMs, num, satLabel, timeOnly, windDir } from "@/lib/format";
+import { getRegionNamer, getT } from "@/lib/i18n-server";
 
 export const metadata: Metadata = { title: "Потенциальный очаг" };
 
@@ -29,13 +30,15 @@ function Fact({ k, children }: { k: string; children: ReactNode }) {
 }
 
 async function Body({ params }: { params: Promise<{ id: string }> }) {
+  const { t, locale } = await getT();
+  const regionName = await getRegionNamer(locale);
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) notFound();
   let h, members, hourly;
   try {
     [h, members, hourly] = await Promise.all([getHotspot(id), getHotspotDetections(id), getHotspotHourly(id)]);
   } catch {
-    return <StateBox tone="error" title="Не удалось загрузить очаг">База данных недоступна. Значения не подставляются.</StateBox>;
+    return <StateBox tone="error" title={t("Не удалось загрузить очаг")}>{t("База данных недоступна. Значения не подставляются.")}</StateBox>;
   }
   if (!h) notFound();
   const w = h.weather;
@@ -48,73 +51,72 @@ async function Body({ params }: { params: Promise<{ id: string }> }) {
     <>
       <div className="rise flex flex-wrap items-end justify-between gap-5">
         <div className="flex max-w-3xl flex-col gap-2.5">
-          <Link href="/map" className="text-[13px] text-fg2 no-underline">← Карта пожаров</Link>
+          <Link href="/map" className="text-[13px] text-fg2 no-underline">{t("← Карта пожаров")}</Link>
           <span className="flex flex-wrap items-center gap-2.5 text-xs">
             <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium"
               style={{ color: active ? "#FF9A6B" : "#9DAAB5", background: active ? "rgba(255,122,61,.12)" : "rgba(255,255,255,.05)" }}>
               <span className="dot size-1.5" style={{ background: active ? "#FF7A3D" : "#7F8D99" }} />
-              {active ? "Активен · обнаружения за последние 24 ч" : "Неактивен · нет новых обнаружений 24 ч"}
+              {active ? t("Активен · обнаружения за последние 24 ч") : t("Неактивен · нет новых обнаружений 24 ч")}
             </span>
-            <span className="mono rounded-full bg-white/5 px-3 py-1 text-fg2">очаг #{h.id}</span>
+            <span className="mono rounded-full bg-white/5 px-3 py-1 text-fg2">{t("очаг #")}{h.id}</span>
           </span>
           <h1 className="m-0 text-3xl font-semibold leading-tight tracking-[-0.035em] md:text-[40px]">
-            {num(h.detection_count)} обнаружений рядом{h.region_name ? ` · ${h.region_name}` : ""}
+            {num(h.detection_count)}{" "}{t("обнаружений рядом")}{h.region_id ? ` · ${regionName(h.region_id, h.region_name)}` : ""}
           </h1>
           <span className="text-sm leading-relaxed text-fg2">
-            Потенциальный очаг — группа спутниковых обнаружений на расстоянии до ~750 м друг от друга в пределах 72 часов.
-            Это не подтверждённый пожар и не его площадь.
-          </span>
+{t("Потенциальный очаг — группа спутниковых обнаружений на расстоянии до ~750 м друг от друга в пределах 72 часов. Это не подтверждённый пожар и не его площадь.")}
+</span>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          {latest && <Link href={`/map?focus=${latest.id}`} className="btn btn-primary">На карте</Link>}
-          <a href={`/api/export?cluster=${h.id}`} className="btn">Экспорт CSV</a>
+          {latest && <Link href={`/map?focus=${latest.id}`} className="btn btn-primary">{t("На карте")}</Link>}
+          <a href={`/api/export?cluster=${h.id}`} className="btn">{t("Экспорт CSV")}</a>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Первое обнаружение" value={timeOnly(h.first_observed_at)} hint={dateTime(h.first_observed_at)} />
-        <Kpi label="Последнее обнаружение" value={timeOnly(h.last_observed_at)} hint={dateTime(h.last_observed_at)} />
-        <Kpi label="Суммарная FRP, МВт" value={dec(h.total_frp_mw, 0)} hint={`максимум ${dec(h.max_frp_mw)} МВт`} />
-        <Kpi label="Наибольший ML-риск" value={risk ? risk.label : "—"} accent={risk ? `${risk.color}66` : undefined}
-          hint={h.scored ? `оценено ${num(h.scored)} из ${num(h.detection_count)}` : "оценок нет"} />
+        <Kpi label={t("Первое обнаружение")} value={timeOnly(h.first_observed_at)} hint={dateTime(h.first_observed_at)} />
+        <Kpi label={t("Последнее обнаружение")} value={timeOnly(h.last_observed_at)} hint={dateTime(h.last_observed_at)} />
+        <Kpi label={t("Суммарная FRP, МВт")} value={dec(h.total_frp_mw, 0)} hint={t("максимум {v} МВт", { v: dec(h.max_frp_mw) })} />
+        <Kpi label={t("Наибольший ML-риск")} value={risk ? t(risk.label) : "—"} accent={risk ? `${risk.color}66` : undefined}
+          hint={h.scored ? t("оценено {n} из {total}", { n: num(h.scored), total: num(h.detection_count) }) : t("оценок нет")} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[3fr_2fr]">
-        <section aria-label="Карта очага с повтором по времени" className="rise flex min-w-0 flex-col gap-2">
-          <SpotMap label="Карта очага" replay center={{ lat: h.lat, lon: h.lon }} hull={h.hull}
+        <section aria-label={t("Карта очага с повтором по времени")} className="rise flex min-w-0 flex-col gap-2">
+          <SpotMap label={t("Карта очага")} replay center={{ lat: h.lat, lon: h.lon }} hull={h.hull}
             points={members.map((m) => ({ id: m.id, lat: m.latitude, lon: m.longitude, t: new Date(m.observed_at).toISOString(),
               href: `/detections/${m.id}`,
               color: m.risk_level ? RISK[m.risk_level]?.color ?? NO_SCORE.color : CONFIDENCE[m.confidence_level]?.color ?? "#36D6E7" }))} />
           <span className="text-[11px] text-muted">
-            Ярче — новее · пунктир — выпуклая оболочка очага · цвет — ML-риск, если оценён, иначе достоверность FIRMS
-          </span>
+{t("Ярче — новее · пунктир — выпуклая оболочка очага · цвет — ML-риск, если оценён, иначе достоверность FIRMS")}
+</span>
         </section>
         <div className="flex min-w-0 flex-col gap-5">
-          <Panel title="Активность по часам" sub={`${dateTime(h.first_observed_at)} — ${dateTime(h.last_observed_at)}`}>
+          <Panel title={t("Активность по часам")} sub={`${dateTime(h.first_observed_at)} — ${dateTime(h.last_observed_at)}`}>
             {hourly.length > 1 ? (
               <AreaChart height={160} color="#FF7A3D" values={hourly.map((p) => p.n)} labels={hourly.map((p) => timeOnly(p.t))} />
             ) : (
-              <StateBox title="Все обнаружения в пределах одного часа">{num(h.detection_count)} обнаружений.</StateBox>
+              <StateBox title={t("Все обнаружения в пределах одного часа")}>{num(h.detection_count)}{" "}{t("обнаружений.")}</StateBox>
             )}
           </Panel>
-          <Panel title="Контекст" delay={0.05}>
+          <Panel title={t("Контекст")} delay={0.05}>
             <dl className="m-0 grid grid-cols-2 gap-4">
-              <Fact k="Регион">{h.region_name ?? "—"}</Fact>
-              <Fact k="Центр"><span className="mono">{coord(h.lat, h.lon)}</span></Fact>
-              <Fact k="Ветер">{ms == null ? "нет данных" : <span className="mono">{dec(ms)} м/с · {windDir(w?.wind_direction_10m_deg)}</span>}</Fact>
-              <Fact k="Влажность">{w?.relative_humidity_2m_pct == null ? "нет данных" : <span className="mono">{dec(w.relative_humidity_2m_pct, 0)} %</span>}</Fact>
-              <Fact k="Спутники">{(h.satellites ?? []).map(satLabel).join(", ") || "—"}</Fact>
-              <Fact k="Алгоритм"><span className="mono text-xs">{h.algorithm}</span></Fact>
+              <Fact k={t("Регион")}>{regionName(h.region_id, h.region_name) ?? "—"}</Fact>
+              <Fact k={t("Центр")}><span className="mono">{coord(h.lat, h.lon)}</span></Fact>
+              <Fact k={t("Ветер")}>{ms == null ? t("нет данных") : <span className="mono">{dec(ms)}{" "}{t("м/с ·")}{" "}{t(windDir(w?.wind_direction_10m_deg))}</span>}</Fact>
+              <Fact k={t("Влажность")}>{w?.relative_humidity_2m_pct == null ? t("нет данных") : <span className="mono">{dec(w.relative_humidity_2m_pct, 0)} %</span>}</Fact>
+              <Fact k={t("Спутники")}>{(h.satellites ?? []).map(satLabel).join(", ") || "—"}</Fact>
+              <Fact k={t("Алгоритм")}><span className="mono text-xs">{h.algorithm}</span></Fact>
             </dl>
-            {w && <span className="text-[11px] text-muted">Погода Open-Meteo для последнего обнаружения с погодой ({dateTime(w.valid_at)})</span>}
+            {w && <span className="text-[11px] text-muted">{t("Погода Open-Meteo для последнего обнаружения с погодой (")}{dateTime(w.valid_at)})</span>}
           </Panel>
         </div>
       </div>
 
-      <Panel title={`Обнаружения в очаге · ${num(members.length)}`} sub="В порядке наблюдения">
+      <Panel title={t("Обнаружения в очаге · {n}", { n: num(members.length) })} sub={t("В порядке наблюдения")}>
         <div className="-mx-2 max-h-[520px] overflow-auto">
           <table className="data min-w-[720px]">
-            <thead><tr><th>Наблюдение (UTC+5)</th><th>Координаты</th><th>Спутник</th><th className="text-right">FRP, МВт</th><th>Оценка</th><th /></tr></thead>
+            <thead><tr><th>{t("Наблюдение (UTC+5)")}</th><th>{t("Координаты")}</th><th>{t("Спутник")}</th><th className="text-right">{t("FRP, МВт")}</th><th>{t("Оценка")}</th><th /></tr></thead>
             <tbody>
               {members.map((m) => (
                 <tr key={m.id} className="row">
@@ -123,7 +125,7 @@ async function Body({ params }: { params: Promise<{ id: string }> }) {
                   <td className="text-fg2">{satLabel(m.satellite)}</td>
                   <td className="mono text-right">{dec(m.frp_mw)}</td>
                   <td><AssessmentBadge row={m} /></td>
-                  <td className="text-right"><Link href={`/detections/${m.id}`} className="text-xs no-underline">Открыть →</Link></td>
+                  <td className="text-right"><Link href={`/detections/${m.id}`} className="text-xs no-underline">{t("Открыть →")}</Link></td>
                 </tr>
               ))}
             </tbody>

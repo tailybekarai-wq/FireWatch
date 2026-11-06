@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { PageHead, Panel, Skeleton, StateBox } from "@/components/ui";
 import { getRecentRuns, getSources } from "@/lib/data";
 import { ago, dateTime, num } from "@/lib/format";
+import { getT } from "@/lib/i18n-server";
 
 export const metadata: Metadata = { title: "Источники данных" };
 
@@ -13,15 +14,16 @@ const STATUS = {
   retired: { label: "Прекращён", color: "#F2C14E" },
 };
 
-export default function SourcesPage() {
+export default async function SourcesPage() {
+  const { t } = await getT();
   return (
     <>
-      <PageHead eyebrow="Pipeline" title="Источники данных"
-        sub="Откуда берутся данные, когда они обновлялись и что пошло не так. Сбор запускается GitHub Actions по расписанию каждые 30 минут; GitHub может задерживать или пропускать плановые запуски.">
+      <PageHead eyebrow="Pipeline" title={t("Источники данных")}
+        sub={t("Откуда берутся данные, когда они обновлялись и что пошло не так. Сбор запускается GitHub Actions по расписанию каждые 30 минут; GitHub может задерживать или пропускать плановые запуски.")}>
         <a href="https://github.com/tailybekarai-wq/FireWatch/actions/workflows/ingest.yml" target="_blank" rel="noreferrer" className="btn"
-          title="Ручной запуск сбора FIRMS доступен владельцу репозитория в GitHub Actions (кнопка Run workflow)">
-          Обновить источник вручную ↗
-        </a>
+          title={t("Ручной запуск сбора FIRMS доступен владельцу репозитория в GitHub Actions (кнопка Run workflow)")}>
+{t("Обновить источник вручную ↗")}
+</a>
       </PageHead>
       <Suspense fallback={<Skeleton h={480} />}><Body /></Suspense>
     </>
@@ -29,9 +31,10 @@ export default function SourcesPage() {
 }
 
 async function Body() {
+  const { t } = await getT();
   let sources, runs;
   try { [sources, runs] = await Promise.all([getSources(), getRecentRuns(12)]); } catch {
-    return <StateBox tone="error" title="Не удалось загрузить статус источников">База данных недоступна.</StateBox>;
+    return <StateBox tone="error" title={t("Не удалось загрузить статус источников")}>{t("База данных недоступна.")}</StateBox>;
   }
   return (
     <>
@@ -39,21 +42,21 @@ async function Body() {
         {sources.map((s, i) => {
           const st = s.deprecated_at ? STATUS.retired : !s.enabled ? STATUS.idle : s.last_status === "ok" ? STATUS.ok : s.last_status ? STATUS.error : STATUS.idle;
           return (
-            <article key={s.code} className="glass lift rise flex flex-col gap-3 rounded-[22px] p-[18px]" style={{ animationDelay: `${i * 0.03}s` }}>
+            <article key={s.code} className="surface lift rise flex flex-col gap-3 rounded-[22px] p-[18px]" style={{ animationDelay: `${i * 0.03}s` }}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-1">
                   <h2 className="m-0 text-base font-semibold">{s.name}</h2>
                   <span className="text-xs text-muted">{s.provider}</span>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]" style={{ color: st.color, background: `${st.color}1a` }}>
-                  <span className="dot size-1.5" style={{ background: st.color }} />{st.label}
+                  <span className="dot size-1.5" style={{ background: st.color }} />{t(st.label)}
                 </span>
               </div>
               {s.description && <p className="m-0 text-[13px] leading-relaxed text-fg2">{s.description}</p>}
               <dl className="m-0 grid grid-cols-2 gap-2 text-xs">
-                <dt className="text-muted">Последний успех</dt><dd className="mono m-0">{s.last_success_at ? ago(s.last_success_at) : "—"}</dd>
-                {s.records_total != null && (<><dt className="text-muted">Записей всего</dt><dd className="mono m-0">{num(s.records_total)}</dd></>)}
-                {s.records_last_24h != null && (<><dt className="text-muted">Получено за 24 ч</dt><dd className="mono m-0">{num(s.records_last_24h)}</dd></>)}
+                <dt className="text-muted">{t("Последний успех")}</dt><dd className="mono m-0">{s.last_success_at ? ago(s.last_success_at, t) : "—"}</dd>
+                {s.records_total != null && (<><dt className="text-muted">{t("Записей всего")}</dt><dd className="mono m-0">{num(s.records_total)}</dd></>)}
+                {s.records_last_24h != null && (<><dt className="text-muted">{t("Получено за 24 ч")}</dt><dd className="mono m-0">{num(s.records_last_24h)}</dd></>)}
               </dl>
               {s.last_error && (
                 <p className="m-0 rounded-xl bg-[#FF4D5E]/10 p-2.5 text-xs text-[#FF9AA4]">
@@ -61,18 +64,18 @@ async function Body() {
                 </p>
               )}
               <div className="mt-auto flex flex-wrap gap-3 text-xs">
-                <a href={s.official_url} target="_blank" rel="noreferrer">Сайт ↗</a>
-                {s.docs_url && <a href={s.docs_url} target="_blank" rel="noreferrer">Документация ↗</a>}
+                <a href={s.official_url} target="_blank" rel="noreferrer">{t("Сайт ↗")}</a>
+                {s.docs_url && <a href={s.docs_url} target="_blank" rel="noreferrer">{t("Документация ↗")}</a>}
                 <span className="text-muted">{s.license}</span>
               </div>
             </article>
           );
         })}
       </div>
-      <Panel title="Последние запуски" sub="Журнал ingestion_runs: плановые, ручные и загрузка истории">
+      <Panel title={t("Последние запуски")} sub={t("Журнал ingestion_runs: плановые, ручные и загрузка истории")}>
         <div className="-mx-2 overflow-x-auto">
           <table className="data min-w-[640px]">
-            <thead><tr><th>#</th><th>Тип</th><th>Статус</th><th>Начало</th><th>Окончание</th><th>Ошибка</th></tr></thead>
+            <thead><tr><th>#</th><th>{t("Тип")}</th><th>{t("Статус")}</th><th>{t("Начало")}</th><th>{t("Окончание")}</th><th>{t("Ошибка")}</th></tr></thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id} className="row">

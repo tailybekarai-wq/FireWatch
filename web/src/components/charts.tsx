@@ -1,6 +1,7 @@
 // Dependency-free SVG charts in the Thermal Glass style. They only draw the numbers
 // they are given; an all-zero series renders as a flat line, never an invented shape.
 import { num, SATELLITES } from "@/lib/format";
+import { getT } from "@/lib/i18n-server";
 
 export function AreaChart({ values, labels, color = "#3BE38A", height = 220 }: {
   values: number[]; labels: string[]; color?: string; height?: number;
@@ -19,7 +20,7 @@ export function AreaChart({ values, labels, color = "#3BE38A", height = 220 }: {
   return (
     <figure className="m-0 flex flex-col gap-2">
       <svg key={sig} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height }} role="img"
-        aria-label={`График: максимум ${num(max)}, всего ${num(sum)}`}>
+        aria-label={`max ${num(max)}, Σ ${num(sum)}`}>
         <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={color} stopOpacity=".25" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient>
           <clipPath id={`${id}-reveal`}><rect className="chart-reveal" x="0" y="0" width={w} height={h} /></clipPath></defs>
@@ -58,7 +59,8 @@ export function HBars({ rows, color = "#36D6E7", limit = 10 }: { rows: { label: 
   );
 }
 
-export function OrbitRings({ rows }: { rows: { satellite: string; n: number }[] }) {
+export async function OrbitRings({ rows }: { rows: { satellite: string; n: number }[] }) {
+  const { t } = await getT();
   const total = rows.reduce((a, r) => a + r.n, 0);
   return (
     <div className="flex flex-col gap-4">
@@ -80,8 +82,8 @@ export function OrbitRings({ rows }: { rows: { satellite: string; n: number }[] 
           </g>
         </svg>
         <span className="absolute inset-0 flex flex-col items-center justify-center text-[11px] text-muted">
-          <span className="mono text-lg text-fg">{num(total)}</span>всего
-        </span>
+          <span className="mono text-lg text-fg">{num(total)}</span>{t("всего")}
+</span>
       </div>
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-xs">
         {rows.map((r) => (
